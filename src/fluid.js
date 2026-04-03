@@ -19,11 +19,10 @@ export function addSource(dst, src, dt) {
  * @param {Float32Array} x0  input field
  * @param {number} diff      diffusion rate
  * @param {number} dt        timestep
- * @param {number} b         boundary type (passed to setBounds)
  * @param {number} cols
  * @param {number} rows
  */
-export function diffuse(x, x0, diff, dt, b, cols, rows) {
+export function diffuse(x, x0, diff, dt, cols, rows) {
   const a = dt * diff * (cols - 2) * (rows - 2)
   linSolve(x, x0, a, 1 + 4 * a, cols, rows)
 }
@@ -92,6 +91,11 @@ export function project(u, v, p, div, cols, rows) {
       v[idx] -= 0.5 * (p[(j + 1) * cols + i] - p[(j - 1) * cols + i]) / hy
     }
   }
+  // Note: setBounds is intentionally not called here for u and v.
+  // This setBounds implementation copies interior values outward (free-slip),
+  // which is wrong for velocity post-projection. Velocity ghost cells are left
+  // as-is; advect() clamps sample coordinates before touching the boundary row,
+  // so the error is limited to one-cell edge artefacts.
 }
 
 // ─── internals ───────────────────────────────────────────────────────────────

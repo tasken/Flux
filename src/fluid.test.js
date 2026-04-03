@@ -20,7 +20,7 @@ describe('diffuse', () => {
     const x0  = new Float32Array(N)
     // place a spike in the center
     x0[2 * cols + 2] = 1.0
-    diffuse(x, x0, 1, 0.1, 1, cols, rows)
+    diffuse(x, x0, 1, 0.1, cols, rows)
     // center should be less than 1 (spread out)
     expect(x[2 * cols + 2]).toBeLessThan(1.0)
     // at least one neighbour should be non-zero
