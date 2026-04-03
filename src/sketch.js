@@ -161,28 +161,21 @@ void main() {
   // Words live inside the liquid as subtle density variations.
   // A soft glow halo trails behind the breathing warp.
   {
-    // Map cell to word texture UV space (centered), correcting for the
-    // physical pixel aspect ratio (cells are taller than wide for monospace)
-    // and the texture's own aspect ratio.
-    vec2 wordCell = (cell + 0.5) / u_gridSize;   // [0,1] grid space
-    vec2 wuv = wordCell - 0.5;                    // center at 0
+    // Work in physical pixel space so letter proportions are always correct.
+    // Cell center in pixels, offset from screen center.
+    vec2 pixCenter = (cell + 0.5) * u_cellSize - u_resolution * 0.5;
 
-    // Physical aspect = (cols * cellW) / (rows * cellH)  — true screen ratio
-    // Texture aspect  = texW / texH
-    float physAspect = (u_gridSize.x * u_cellSize.x) / (u_gridSize.y * u_cellSize.y);
-    float texAspect  = ${wordCanvas.width}.0 / ${wordCanvas.height}.0;
-    wuv.x *= physAspect / texAspect;
-
-    // Breathing zoom — slow oscillation in word scale
+    // Breathing zoom — oscillates word size
     float breathe = ${wordBreathMin} + cos(t * ${wordBreathSpeed}) * ${(wordBreathMax - wordBreathMin).toFixed(2)};
-    wuv *= breathe;
+
+    // Map to texture UV: at scale=1 one texture pixel = one screen pixel
+    vec2 texSize = vec2(${wordCanvas.width}.0, ${wordCanvas.height}.0);
+    vec2 wuv = pixCenter / (texSize * breathe) + 0.5;
 
     // Noise warp — displace UV for organic letter shapes
     float wx = sin(wuv.y * 3.1 + t * 0.7) * ${wordWarpX};
     float wy = cos(wuv.x * 2.7 + t * 0.9) * ${wordWarpY};
     wuv += vec2(wx, wy);
-
-    wuv += 0.5;   // back to [0,1]
 
     // Only sample inside texture bounds; outside → 0
     float inBounds = step(0.0, wuv.x) * step(wuv.x, 1.0)
@@ -191,7 +184,7 @@ void main() {
 
     // Soft glow: sample neighbours with slight offset for a halo
     float glow = 0.0;
-    vec2 texel = 1.0 / vec2(${wordCanvas.width}.0, ${wordCanvas.height}.0);
+    vec2 texel = 1.0 / texSize;
     for (float gx = -2.0; gx <= 2.0; gx += 1.0) {
       for (float gy = -2.0; gy <= 2.0; gy += 1.0) {
         vec2 off = vec2(gx, gy) * texel * ${wordGlowRadius};

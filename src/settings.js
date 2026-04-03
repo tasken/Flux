@@ -11,8 +11,8 @@ export const chars      = ' .·:;-=+*abcXYZ#@W'
 export const wordCanvas  = { width: 1024, height: 64 }
 export const wordFontPx  = 40            // px size for lyric text on canvas
 export const wordFlapStagger = 6         // frame delay per letter position
-export const wordBreathMin   = 0.55      // zoom oscillation min (smaller = bigger text)
-export const wordBreathMax   = 0.85      // zoom oscillation max
+export const wordBreathMin   = 3.0       // zoom scale min (larger = bigger text on screen)
+export const wordBreathMax   = 4.5       // zoom scale max
 export const wordBreathSpeed = 1.1       // radians/time-unit
 export const wordWarpX       = 0.04      // noise warp amplitude X
 export const wordWarpY       = 0.06      // noise warp amplitude Y
