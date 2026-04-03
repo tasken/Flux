@@ -2,6 +2,7 @@ import { createRenderer } from './renderer.js'
 import { vertexSource, fragmentSource, config } from './sketch.js'
 import { createSimulation } from './simulation.js'
 import { createWordCycler } from './words.js'
+import { pointerForce, pointerForceDown, pointerDensity, pointerDensityDown, pointerRadius } from './settings.js'
 
 function showBootError(message) {
   let panel = document.getElementById('boot-error')
@@ -43,7 +44,7 @@ async function boot() {
   }
 
   const renderer = createRenderer(canvas, { vertexSource, fragmentSource, ...config })
-  const wordCycler = createWordCycler(config.fontFamily)
+  const wordCycler = createWordCycler()
 
   let sim = null  // created after first resize when grid dimensions are known
   const pointer = {
@@ -79,9 +80,9 @@ async function boot() {
 
     // Inject pointer forces into the fluid sim
     if (sim && pointer.active) {
-      const force = pointer.down ? 80 : 30
-      const densityAmt = pointer.down ? 12 : 5
-      sim.injectForce(pointer.x, pointer.y, pointer.dx * force, pointer.dy * force, densityAmt, 3)
+      const force = pointer.down ? pointerForceDown : pointerForce
+      const densityAmt = pointer.down ? pointerDensityDown : pointerDensity
+      sim.injectForce(pointer.x, pointer.y, pointer.dx * force, pointer.dy * force, densityAmt, pointerRadius)
     }
 
     // Step the simulation and upload to GPU

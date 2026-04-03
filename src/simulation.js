@@ -2,11 +2,12 @@
 // Exposes density + velocity as a packed RGBA Uint8Array for GPU texture upload.
 
 import { addSource, diffuse, advect, project } from './fluid.js'
+import { fluidDiff, fluidVisc, fluidDt, fluidDecay } from './settings.js'
 
-const DIFF = 0.00001   // diffusion rate
-const VISC = 0.00001   // viscosity
-const DT   = 0.12      // timestep per step
-const DECAY = 0.985    // per-frame velocity/density drain
+const DIFF  = fluidDiff
+const VISC  = fluidVisc
+const DT    = fluidDt
+const DECAY = fluidDecay
 
 export function createSimulation(cols, rows) {
   const N = cols * rows

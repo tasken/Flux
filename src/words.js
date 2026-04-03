@@ -3,6 +3,10 @@
 //
 // LINES is a sequential script — each entry appears once in order, then loops.
 
+import {
+  wordCanvas, wordFontPx, wordCycleFrames, wordFlapStagger, fontFamily,
+} from './settings.js'
+
 const LINES = [
   'WE LEFT ALL THE PAIN BEHIND',
   'WE DON\'T HAVE TO WORRY',
@@ -45,7 +49,7 @@ export function createWordCycler(fontFamily) {
     for (let i = 0; i < word.length; i++) {
       const idx = ALPHABET.indexOf(word[i])
       target[i] = idx >= 0 ? idx : 0
-      delay[i]  = i * 6   // 6-frame stagger per letter
+      delay[i]  = i * wordFlapStagger
     }
     animating = true
   }
@@ -69,7 +73,7 @@ export function createWordCycler(fontFamily) {
     const { width, height } = canvas
     ctx.clearRect(0, 0, width, height)
     const word = current.map(i => ALPHABET[i]).join('')
-    ctx.font = `bold 40px ${fontFamily}`
+    ctx.font = `bold ${wordFontPx}px ${fontFamily}`
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle    = '#fff'
@@ -79,7 +83,7 @@ export function createWordCycler(fontFamily) {
   /** Call once per frame. Returns the canvas to upload as a GPU texture. */
   function update() {
     frameCount++
-    if (frameCount % 300 === 1) pickNextWord()   // new word every ~5 s at 60 fps
+    if (frameCount % wordCycleFrames === 1) pickNextWord()
     if (animating && frameCount % 2 === 0) stepFlap()
     render()
     return canvas

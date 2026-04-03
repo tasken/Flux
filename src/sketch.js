@@ -4,11 +4,14 @@
 // │  Vite HMR will reload the browser on save.                                 │
 // └─────────────────────────────────────────────────────────────────────────────┘
 
-export const config = {
-  fontSize:   12,
-  fontFamily: "'IBM Plex Mono', monospace",
-  chars:      ' .·:;-=+*abcXYZ#@W',
-}
+import {
+  fontSize, fontFamily, chars,
+  wordCanvas, wordBreathMin, wordBreathMax, wordBreathSpeed,
+  wordWarpX, wordWarpY, wordBoost, wordGlow, wordGlowRadius,
+  fieldTimeScale, fieldAmplitude,
+} from './settings.js'
+
+export const config = { fontSize, fontFamily, chars }
 
 // ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
 
@@ -136,8 +139,8 @@ void main() {
   float fSpeed   = fluid.a;                       // [0, 1]
 
   // ── Procedural background (gentle ambient motion) ──
-  float t     = u_time * 0.0006 + u_seed;
-  float bgVal = procValue(uv, t) * 0.65;          // bold ambient backdrop
+  float t     = u_time * ${fieldTimeScale} + u_seed;
+  float bgVal = procValue(uv, t) * ${fieldAmplitude};          // bold ambient backdrop
 
   // ── Warp UV by fluid velocity for organic distortion ──
   uv += vec2(fVx, fVy) * 0.4;
@@ -158,23 +161,25 @@ void main() {
   // Words live inside the liquid as subtle density variations.
   // A soft glow halo trails behind the breathing warp.
   {
-    // Map cell to word texture UV space (centered), correcting for both
-    // grid and texture aspect ratios so letters keep their natural shape.
+    // Map cell to word texture UV space (centered), correcting for the
+    // physical pixel aspect ratio (cells are taller than wide for monospace)
+    // and the texture's own aspect ratio.
     vec2 wordCell = (cell + 0.5) / u_gridSize;   // [0,1] grid space
     vec2 wuv = wordCell - 0.5;                    // center at 0
 
-    // Fix aspect: grid may not be square, texture is 16:1
-    float gridAspect = u_gridSize.x / u_gridSize.y;   // e.g. 1.7 for widescreen
-    float texAspect  = 1024.0 / 64.0;                 // 16.0
-    wuv.x *= gridAspect / texAspect;                   // squeeze X to match
+    // Physical aspect = (cols * cellW) / (rows * cellH)  — true screen ratio
+    // Texture aspect  = texW / texH
+    float physAspect = (u_gridSize.x * u_cellSize.x) / (u_gridSize.y * u_cellSize.y);
+    float texAspect  = ${wordCanvas.width}.0 / ${wordCanvas.height}.0;
+    wuv.x *= physAspect / texAspect;
 
-    // Breathing zoom — larger display area, slow drift
-    float breathe = 0.7 + cos(t * 1.1) * 0.15;
+    // Breathing zoom — slow oscillation in word scale
+    float breathe = ${wordBreathMin} + cos(t * ${wordBreathSpeed}) * ${(wordBreathMax - wordBreathMin).toFixed(2)};
     wuv *= breathe;
 
     // Noise warp — displace UV for organic letter shapes
-    float wx = sin(wuv.y * 3.1 + t * 0.7) * 0.04;
-    float wy = cos(wuv.x * 2.7 + t * 0.9) * 0.06;
+    float wx = sin(wuv.y * 3.1 + t * 0.7) * ${wordWarpX};
+    float wy = cos(wuv.x * 2.7 + t * 0.9) * ${wordWarpY};
     wuv += vec2(wx, wy);
 
     wuv += 0.5;   // back to [0,1]
@@ -186,10 +191,10 @@ void main() {
 
     // Soft glow: sample neighbours with slight offset for a halo
     float glow = 0.0;
-    vec2 texel = 1.0 / vec2(1024.0, 64.0);  // word canvas texel size
+    vec2 texel = 1.0 / vec2(${wordCanvas.width}.0, ${wordCanvas.height}.0);
     for (float gx = -2.0; gx <= 2.0; gx += 1.0) {
       for (float gy = -2.0; gy <= 2.0; gy += 1.0) {
-        vec2 off = vec2(gx, gy) * texel * 1.5;
+        vec2 off = vec2(gx, gy) * texel * ${wordGlowRadius};
         vec2 guv = wuv + off;
         float gBounds = step(0.0, guv.x) * step(guv.x, 1.0)
                       * step(0.0, guv.y) * step(guv.y, 1.0);
@@ -199,9 +204,9 @@ void main() {
     glow /= 25.0;  // average of 5×5 samples
 
     // Subtle: letters are gentle density ripples inside the fluid
-    value += wordSample * 0.22;
+    value += wordSample * ${wordBoost};
     // Trailing glow — even softer, lingers around letter shapes
-    value += glow * 0.12;
+    value += glow * ${wordGlow};
   }
 
   value = clamp(value, -1.0, 1.0);
