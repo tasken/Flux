@@ -6,7 +6,7 @@
 
 import {
   fontSize, fontFamily, chars,
-  wordCanvas, wordBreathMin, wordBreathMax, wordBreathSpeed,
+  wordCanvas, wordBreathSpeed,
   wordWarpX, wordWarpY, wordBoost, wordGlow, wordGlowRadius,
   fieldTimeScale, fieldAmplitude,
 } from './settings.js'
@@ -164,23 +164,26 @@ void main() {
   // Words live inside the liquid as subtle density variations.
   // A soft glow halo trails behind the breathing warp.
   {
-    // Work in physical pixel space so letter proportions are always correct.
-    // Cell center in pixels, offset from screen center.
-    vec2 pixCenter = (cell + 0.5) * u_cellSize - u_resolution * 0.5;
+    // Use the fluid-warped UV → back to pixel space from screen center.
+    // This makes word text flow with the fluid distortion.
+    vec2 warpedCell = (uv * m * 0.5) + u_gridSize * 0.5;
+    vec2 warpedPx   = warpedCell * u_cellSize;
+    vec2 centerOff  = warpedPx - u_resolution * 0.5;
 
-    // Breathing zoom — oscillates word size
-    float breathe = ${g(wordBreathMin)} + cos(t * ${g(wordBreathSpeed)}) * ${g(wordBreathMax - wordBreathMin)};
+    // Screen-relative fit scale — text adapts to any window size
+    float fitScale = min(u_resolution.x / 1200.0, u_resolution.y / 200.0);
+    // Gentle breathing oscillation
+    fitScale *= 1.0 + 0.08 * cos(t * ${g(wordBreathSpeed)});
 
-    // Map to texture UV: at scale=1 one texture pixel = one screen pixel
     vec2 texSize = vec2(${g(wordCanvas.width)}, ${g(wordCanvas.height)});
-    vec2 scaledTex = texSize * breathe;
+    vec2 scaledTex = texSize * fitScale;
 
     // Noise warp in pixel space (uniform distortion on both axes)
-    float normX = pixCenter.x / scaledTex.x;
-    float normY = pixCenter.y / scaledTex.y;
+    float normX = centerOff.x / scaledTex.x;
+    float normY = centerOff.y / scaledTex.y;
     float wxPx = sin(normY * 6.0 + t * 0.7) * ${g(wordWarpX)} * scaledTex.x;
     float wyPx = cos(normX * 6.0 + t * 0.9) * ${g(wordWarpY)} * scaledTex.y;
-    vec2 wuv = (pixCenter + vec2(wxPx, wyPx)) / scaledTex + 0.5;
+    vec2 wuv = (centerOff + vec2(wxPx, wyPx)) / scaledTex + 0.5;
 
     // Only sample inside texture bounds; outside → 0
     float inBounds = step(0.0, wuv.x) * step(wuv.x, 1.0)

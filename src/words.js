@@ -22,7 +22,7 @@ const LINES = [
 
 const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?\'"0123456789-'
 
-export function createWordCycler(fontFamily) {
+export function createWordCycler() {
   let wordIndex  = 0
   let frameCount = 0
   let animating  = false
@@ -33,8 +33,8 @@ export function createWordCycler(fontFamily) {
 
   // Wider canvas for full lyric lines — bilinear GPU sampling smooths it
   const canvas = document.createElement('canvas')
-  canvas.width  = 1024
-  canvas.height = 64
+  canvas.width  = wordCanvas.width
+  canvas.height = wordCanvas.height
   const ctx = canvas.getContext('2d')
 
   function pickNextWord() {
