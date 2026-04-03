@@ -2,8 +2,7 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   server: {
-    host: '192.168.1.3',
-    port: 58707,
+    host: true,
     open: false
   },
   optimizeDeps: {
