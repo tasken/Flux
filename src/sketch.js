@@ -7,7 +7,7 @@
 export const config = {
   fontSize:   12,
   fontFamily: "'IBM Plex Mono', monospace",
-  chars:      ' ·.-~:+ca01OX#@',
+  chars:      ' .·:;-=+*abcXYZ#@W',
 }
 
 // ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
@@ -36,6 +36,8 @@ uniform float     u_pointerActive;
 uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
 uniform float     u_seed;          // random offset so each page load is unique
+uniform float     u_mode;          // 0 = procedural, 1 = words
+uniform sampler2D u_wordTex;       // word bitmap (split-flap cycler output)
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
 // Perceptually uniform: equal L steps look equally bright regardless of hue.
@@ -153,6 +155,26 @@ void main() {
   value += pointerGlow * 0.2 + pointerBurst * 0.3;
   value += dot(pointerFlow, uv - pointerUV) * pointerGlow * 0.6;
 
+  // ── Words mode: word bitmap sampled through warped UVs ──
+  if (u_mode > 0.5) {
+    // Convert warped uv back to physical pixels from center
+    vec2 warpedCell = (uv * m * 0.5) + u_gridSize * 0.5;
+    vec2 warpedFc = warpedCell * u_cellSize;
+    vec2 centerOffset = warpedFc - (u_resolution * 0.5);
+    
+    // Scale texture to fit screen while maintaining its natural 512:128 (4:1) aspect ratio
+    float fitScale = min(u_resolution.x / 600.0, u_resolution.y / 200.0); 
+    vec2 wordUV = (centerOffset / (vec2(512.0, 128.0) * fitScale)) + 0.5;
+    
+    wordUV = clamp(wordUV, 0.0, 1.0);
+    float wordSample = texture2D(u_wordTex, wordUV).r;
+
+    // Where the word bitmap is "on", push density high (dense chars);
+    // where "off", keep the ambient procedural value (sparse chars).
+    // The warp in uv makes the word distort and flow organically.
+    value = mix(bgVal * 0.35, 0.85 + bgVal * 0.15, wordSample);
+  }
+
   value = clamp(value, -1.0, 1.0);
   float d = (value + 1.0) * 0.5;                  // [0, 1]
 
@@ -166,18 +188,21 @@ void main() {
 
   // ── Color: OKLch driven by fluid velocity + density ──
   // Cold palette: hue locked to blue → cyan → purple range (~3.4 – 5.2 rad)
+  // Shifts warm (orange/red) on click for tactile feedback
   float vorticity = fVy - fVx;
   float hueBase   = t * 0.13 + vorticity * 1.2 + bgVal * 0.5
                     + pointerGlow * 0.3 + pointerBurst * 0.6;
-  // Map to cold band: center at 4.3 rad (≈blue-cyan), swing ±0.9
-  float hueRad    = 4.3 + sin(hueBase) * 0.9;
+
+  float coldHue   = 4.3 + sin(hueBase) * 0.9;
+  float warmHue   = 0.6 + sin(hueBase) * 0.5;
+  float hueRad    = mix(coldHue, warmHue, pointerBurst);
+
   float chroma    = 0.18 + abs(bgVal) * 0.10 + fSpeed * 0.14
                     + pointerGlow * 0.05 + pointerBurst * 0.06;
   float Lum       = min(d * 0.88 + fSpeed * 0.15
                         + pointerGlow * 0.10 + pointerBurst * 0.14, 0.95);
   vec3  rgb       = oklch2rgb(Lum, chroma, hueRad);
 
-  // Character pixels are colored; background is black
   gl_FragColor = vec4(rgb * alpha, 1.0);
 }
 `

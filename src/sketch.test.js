@@ -35,6 +35,7 @@ describe('shader sources', () => {
       'u_time', 'u_resolution', 'u_gridSize', 'u_cellSize',
       'u_atlas', 'u_charCount', 'u_pointer', 'u_pointerDelta',
       'u_pointerActive', 'u_pointerDown', 'u_fluid',
+      'u_seed', 'u_mode', 'u_wordTex',
     ]
     for (const name of expected) {
       expect(fragmentSource).toContain(name)

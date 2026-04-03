@@ -1,6 +1,7 @@
 import { createRenderer } from './renderer.js'
 import { vertexSource, fragmentSource, config } from './sketch.js'
 import { createSimulation } from './simulation.js'
+import { createWordCycler } from './words.js'
 
 function showBootError(message) {
   let panel = document.getElementById('boot-error')
@@ -42,6 +43,10 @@ async function boot() {
   }
 
   const renderer = createRenderer(canvas, { vertexSource, fragmentSource, ...config })
+  const wordCycler = createWordCycler(config.fontFamily)
+  let currentMode = 0  // 0 = procedural (default), 1 = words
+  renderer.setMode(currentMode)
+
   let sim = null  // created after first resize when grid dimensions are known
   const pointer = {
     x: 0.5,
@@ -87,6 +92,12 @@ async function boot() {
       renderer.uploadFluid(sim.pixels, sim.cols, sim.rows)
     }
 
+    // Update word bitmap each frame (cheap: small canvas + texture upload)
+    if (currentMode === 1) {
+      const wordCanvas = wordCycler.update()
+      renderer.uploadWordTexture(wordCanvas)
+    }
+
     pointer.dx *= 0.82
     pointer.dy *= 0.82
     renderer.draw(now, pointer)
@@ -125,7 +136,13 @@ async function boot() {
     pointer.down = 0
   }
 
+  function handleKeyDown(event) {
+    if (event.key === '1') { currentMode = 0; renderer.setMode(0) }
+    if (event.key === '2') { currentMode = 1; renderer.setMode(1) }
+  }
+
   window.addEventListener('resize', handleResize)
+  window.addEventListener('keydown', handleKeyDown)
   canvas.addEventListener('pointermove', handlePointerMove)
   canvas.addEventListener('pointerenter', handlePointerEnter)
   canvas.addEventListener('pointerleave', handlePointerLeave)
@@ -149,6 +166,7 @@ async function boot() {
     import.meta.hot.dispose(() => {
       cancelAnimationFrame(rafId)
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('keydown', handleKeyDown)
       canvas.removeEventListener('pointermove', handlePointerMove)
       canvas.removeEventListener('pointerenter', handlePointerEnter)
       canvas.removeEventListener('pointerleave', handlePointerLeave)
