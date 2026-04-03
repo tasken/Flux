@@ -1,65 +1,45 @@
-// Word list + split-flap animation cycler.
-// Renders 3-letter words as a bitmap texture for the GPU words mode.
-// Inspired by the ertdfgcvb.xyz homepage departure-board animation.
-
-// ── 3-letter word list (≈500 common English words) ────────────────────────────
-// The first three entries spell "ert dfg cvb" — a nod to the studio name.
+// Word emergence — split-flap cycler whose bitmap is sampled by the GPU shader
+// with noise-warped UVs so words rise from and dissolve into the procedural field.
 
 const WORDS = [
-  // ── The Void / Origins ──
-  'VOID', 'ABYSS', 'ORIGIN', 'SPARK', 'SILENCE', 'NOTHING',
-  
-  // ── The Machine / System ──
-  'SYSTEM', 'NETWORK', 'SYNAPSE', 'CIRCUIT', 'MEMORY', 'ENGINE',
-  
-  // ── The Ethereal / Cosmic ──
-  'NEBULA', 'ECLIPSE', 'HORIZON', 'GRAVITY', 'ORBIT', 'ZENITH',
-  
-  // ── The Existential / Organic ──
-  'BREATHE', 'PULSE', 'FLESH', 'MARROW', 'VISION', 'SPIRIT',
-  
-  // ── The Fall / Dark ──
-  'DECAY', 'ENTROPY', 'FRACTURE', 'SHADOW', 'WINTER', 'RUIN',
-  
-  // ── The Insight / Forward ──
-  'AWAKEN', 'EVOLVE', 'BECOME', 'TRANSCEND', 'BEYOND', 'INFINITE'
+  'VOID',    'ABYSS',   'ORIGIN',  'SPARK',   'SILENCE', 'NOTHING',
+  'SYSTEM',  'NETWORK', 'SYNAPSE', 'CIRCUIT', 'MEMORY',  'ENGINE',
+  'NEBULA',  'ECLIPSE', 'HORIZON', 'GRAVITY', 'ORBIT',   'ZENITH',
+  'BREATHE', 'PULSE',   'FLESH',   'MARROW',  'VISION',  'SPIRIT',
+  'DECAY',   'ENTROPY', 'FRACTURE','SHADOW',  'WINTER',  'RUIN',
+  'AWAKEN',  'EVOLVE',  'BECOME',  'TRANSCEND','BEYOND', 'INFINITE',
 ]
 
-const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-
-// ── split-flap animation ──────────────────────────────────────────────────────
-// Characters cycle through the alphabet toward their target, staggered per
-// letter position — like an airport departure board.
+const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 export function createWordCycler(fontFamily) {
   let wordIndex  = 0
   let frameCount = 0
   let animating  = false
 
-  const current = []   // dynamic array for current alphabet index
-  const target  = []   // dynamic array for target alphabet index
-  const delay   = []   // dynamic staggered start delay
+  const current = []   // current alphabet index per letter
+  const target  = []   // target alphabet index per letter
+  const delay   = []   // staggered start delay per letter
 
-  // Off-screen canvas for word bitmap (white text on transparent bg)
+  // Small canvas — bilinear GPU sampling turns it into smooth gradients
   const canvas = document.createElement('canvas')
-  canvas.width  = 512  // Wider canvas to fit longer words
-  canvas.height = 128
+  canvas.width  = 256
+  canvas.height = 64
   const ctx = canvas.getContext('2d')
 
   function pickNextWord() {
-    const word = WORDS[wordIndex % WORDS.length].toUpperCase()
+    const word = WORDS[wordIndex % WORDS.length]
     wordIndex++
-    
-    // Resize flap arrays to match new word length
+
     while (current.length < word.length) current.push(0)
     while (current.length > word.length) current.pop()
     target.length = word.length
-    delay.length = word.length
+    delay.length  = word.length
 
     for (let i = 0; i < word.length; i++) {
       const idx = ALPHABET.indexOf(word[i])
       target[i] = idx >= 0 ? idx : 0
-      delay[i]  = i * 4  // slightly faster stagger to keep animation tight
+      delay[i]  = i * 6   // 6-frame stagger per letter
     }
     animating = true
   }
@@ -83,7 +63,7 @@ export function createWordCycler(fontFamily) {
     const { width, height } = canvas
     ctx.clearRect(0, 0, width, height)
     const word = current.map(i => ALPHABET[i]).join('')
-    ctx.font = `bold 48px ${fontFamily}`
+    ctx.font = `bold 36px ${fontFamily}`
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle    = '#fff'
@@ -93,7 +73,7 @@ export function createWordCycler(fontFamily) {
   /** Call once per frame. Returns the canvas to upload as a GPU texture. */
   function update() {
     frameCount++
-    if (frameCount % 240 === 1) pickNextWord()   // new word every ~4 s at 60 fps
+    if (frameCount % 300 === 1) pickNextWord()   // new word every ~5 s at 60 fps
     if (animating && frameCount % 2 === 0) stepFlap()
     render()
     return canvas
