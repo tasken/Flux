@@ -52,11 +52,13 @@ function getAttrib(gl, program, name) {
 }
 
 function getUniforms(gl, program, names) {
+  // Locations may be null when a GLSL compiler optimises away a uniform
+  // (common on mobile GPUs).  WebGL treats gl.uniform*() with a null
+  // location as a silent no-op, so storing null here is safe and lets
+  // the renderer degrade gracefully instead of crashing.
   const locations = {}
   for (const name of names) {
-    const location = gl.getUniformLocation(program, name)
-    if (location === null) throw new Error(`Missing shader uniform: ${name}`)
-    locations[name] = location
+    locations[name] = gl.getUniformLocation(program, name)
   }
   return locations
 }
