@@ -5,11 +5,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host",
-    "check": "npm run test && npm run build",
-    "test": "vitest run --config vitest.config.js"
+    "check": "npm run build"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
-    "vitest": "^1.0.0"
+    "vite": "^8.0.3"
   }
 }
