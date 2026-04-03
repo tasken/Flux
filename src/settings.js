@@ -10,7 +10,6 @@ export const chars      = ' .·:;-=+*abcXYZ#@W'
 // ── Word emergence ────────────────────────────────────────────────────────────
 export const wordCanvas  = { width: 1024, height: 64 }
 export const wordFontPx  = 40            // px size for lyric text on canvas
-export const wordCycleFrames = 300       // frames between new lines (~5 s @ 60 fps)
 export const wordFlapStagger = 6         // frame delay per letter position
 export const wordBreathMin   = 0.55      // zoom oscillation min (smaller = bigger text)
 export const wordBreathMax   = 0.85      // zoom oscillation max

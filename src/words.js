@@ -4,7 +4,7 @@
 // LINES is a sequential script — each entry appears once in order, then loops.
 
 import {
-  wordCanvas, wordFontPx, wordCycleFrames, wordFlapStagger, fontFamily,
+  wordCanvas, wordFontPx, wordFlapStagger, fontFamily,
 } from './settings.js'
 
 const LINES = [
@@ -82,9 +82,9 @@ export function createWordCycler(fontFamily) {
 
   /** Call once per frame. Returns the canvas to upload as a GPU texture. */
   function update() {
-    frameCount++
-    if (frameCount % wordCycleFrames === 1) pickNextWord()
-    if (animating && frameCount % 2 === 0) stepFlap()
+    // Advance to next line only after the flap scan completes
+    if (!animating) pickNextWord()
+    if (animating && frameCount++ % 2 === 0) stepFlap()
     render()
     return canvas
   }
