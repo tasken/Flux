@@ -20,7 +20,6 @@ A hybrid CPU+GPU renderer combines a Navier-Stokes fluid simulation with a proce
 - JavaScript (ES modules)
 - WebGL
 - Vite (dev server + build)
-- Vitest (tests)
 - Google Fonts (IBM Plex Mono)
 
 ## Getting Started
@@ -35,12 +34,6 @@ npm install
 
 ```bash
 npm run dev
-```
-
-### Run tests
-
-```bash
-npm test
 ```
 
 ### Create a production build
@@ -60,19 +53,13 @@ webArt/
 │   ├── sketch.js           # GLSL shaders, visual config, OKLch color
 │   ├── simulation.js       # CPU fluid sim wrapper with RGBA packing
 │   ├── words.js            # split-flap word cycler
-│   ├── sketch.test.js
-│   ├── renderer.test.js
 │   └── cpu-solver/
-│       ├── fluid.js        # Navier-Stokes solver (used by simulation.js)
-│       ├── fluid.test.js
-│       ├── map.js          # visual mapping helpers (reference code)
-│       └── map.test.js
+│       └── fluid.js        # Navier-Stokes solver (used by simulation.js)
 ├── docs/
 │   ├── design.md           # architecture and design spec
 │   └── future.md           # improvement roadmap
 ├── .github/workflows/      # GitHub Pages deploy
 ├── vite.config.js
-├── vitest.config.js
 └── package.json
 ```
 
@@ -90,5 +77,4 @@ webArt/
 | `npm run dev` | Start Vite dev server with HMR |
 | `npm run build` | Create a production bundle |
 | `npm run preview` | Preview the production build |
-| `npm test` | Run test suite with Vitest |
-| `npm run check` | Run tests + build |
+| `npm run check` | Run build |

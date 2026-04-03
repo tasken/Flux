@@ -34,13 +34,8 @@ webArt/
 │   ├── sketch.js           ← GLSL shader sources, visual config, OKLch color
 │   ├── simulation.js       ← wraps CPU solver into frame-steppable sim with RGBA packing
 │   ├── words.js            ← split-flap word cycler (departure-board animation)
-│   ├── sketch.test.js      ← sketch config + shader contract tests
-│   ├── renderer.test.js    ← renderer module contract tests
 │   └── cpu-solver/
 │       ├── fluid.js        ← pure Navier-Stokes solver (addSource, diffuse, advect, project)
-│       ├── fluid.test.js   ← solver unit tests
-│       ├── map.js          ← visual mapping helpers (reference code, not used at runtime)
-│       ├── map.test.js     ← mapping unit tests
 │       └── README.md       ← module documentation
 ├── docs/
 │   ├── design.md           ← this file
@@ -49,8 +44,7 @@ webArt/
 │   ├── workflows/deploy.yml← GitHub Pages deploy workflow
 │   └── instructions/       ← Copilot instruction files
 ├── vite.config.js          ← dev server config (host: true)
-├── vitest.config.js        ← test config (node environment)
-└── package.json            ← deps: vite (dev), vitest (test)
+└── package.json            ← deps: vite (dev)
 ```
 
 ---
@@ -146,7 +140,6 @@ Colors use the OKLch perceptual color space (Björn Ottosson's OKLab, 2020). The
 npm install
 npm run dev        # Vite starts with HMR
 # edit src/sketch.js → shader recompiles instantly (no page reload)
-npm test           # run vitest suite
 npm run build      # production bundle
 ```
 
