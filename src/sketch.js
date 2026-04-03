@@ -14,6 +14,7 @@ const PASSES    = 2        // solver passes per frame
 let cols, rows
 let density, densityPrev
 let vx, vy, vxPrev, vyPrev
+let p, div  // scratch arrays for project()
 
 export function boot(context) {
   cols = context.cols
@@ -25,6 +26,8 @@ export function boot(context) {
   vy          = new Float32Array(N)
   vxPrev      = new Float32Array(N)
   vyPrev      = new Float32Array(N)
+  p   = new Float32Array(N)
+  div = new Float32Array(N)
 }
 
 export function pre(context, cursor) {
@@ -49,7 +52,7 @@ export function pre(context, cursor) {
   }
 
   // run solver PASSES times
-  for (let p = 0; p < PASSES; p++) {
+  for (let pass = 0; pass < PASSES; pass++) {
     // velocity step
     addSource(vx, vxPrev, DT)
     addSource(vy, vyPrev, DT)
@@ -57,18 +60,18 @@ export function pre(context, cursor) {
     diffuse(vx, vxPrev, VISC, DT, cols, rows)
     ;[vy, vyPrev] = [vyPrev, vy]
     diffuse(vy, vyPrev, VISC, DT, cols, rows)
-    project(vx, vy, vxPrev, vyPrev, cols, rows)
+    project(vx, vy, p, div, cols, rows)
     ;[vx, vxPrev] = [vxPrev, vx]
     ;[vy, vyPrev] = [vyPrev, vy]
     advect(vx, vxPrev, vxPrev, vyPrev, DT, cols, rows)
     advect(vy, vyPrev, vxPrev, vyPrev, DT, cols, rows)
-    project(vx, vy, vxPrev, vyPrev, cols, rows)
+    project(vx, vy, p, div, cols, rows)
 
     // density step
     addSource(density, densityPrev, DT)
-    ;[density, densityPrev] = [densityPrev, density]
+    ;[density, densityPrev] = [densityPrev, density]  // diffuse reads prev, writes current
     diffuse(density, densityPrev, DIFF, DT, cols, rows)
-    ;[density, densityPrev] = [densityPrev, density]
+    ;[density, densityPrev] = [densityPrev, density]  // advect reads prev, writes current
     advect(density, densityPrev, vx, vy, DT, cols, rows)
   }
 
@@ -92,6 +95,8 @@ export function main({ x, y }, { cols }) {
   }
 }
 
+// document.querySelector is safe here: ES module <script> tags are always
+// deferred — the DOM is fully parsed before this executes.
 export const settings = {
   fps: 30,
   element: document.querySelector('#abc'),
