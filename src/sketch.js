@@ -9,8 +9,25 @@ const FORCE     = 80       // velocity impulse magnitude on mouse move
 const SOURCE    = 12       // density injection amount on mouse move
 const RADIUS    = 3        // injection radius in cells
 const PASSES    = 2        // solver passes per frame
-const AMB_SRC   = 5        // ambient source density per frame
-const AMB_FORCE = 25       // ambient velocity impulse
+const AMB_SRC   = 0.6      // ambient density per injected cell per frame
+const AMB_FORCE = 1.8      // ambient velocity impulse per cell (curl-noise)
+const CURL_STEP = 6        // inject curl noise every N cells
+const DECAY     = 0.997    // per-frame density decay to prevent saturation
+const VEL_DECAY = 0.988    // per-frame velocity decay (linear drag) — keeps speed bounded
+
+// ─── cheap fBm noise ─────────────────────────────────────────────────────────
+// Fractional Brownian motion via 3 sin/cos octaves — no external dep needed.
+// Returns a smooth scalar in roughly [-1, 1].
+function fbm(x, y, t) {
+  let v = 0, amp = 0.5, freq = 1
+  for (let oct = 0; oct < 3; oct++) {
+    v    += amp * Math.sin(x * freq + t * (0.07 + oct * 0.04))
+                * Math.cos(y * freq + t * (0.05 + oct * 0.03))
+    amp  *= 0.5
+    freq *= 2.1
+  }
+  return v
+}
 
 // ─── simulation state ─────────────────────────────────────────────────────────
 let cols, rows
@@ -45,26 +62,23 @@ export function boot(context) {
 }
 
 export function pre(context, cursor) {
-  // ambient drifting sources — 3 lissajous-like orbits at different frequencies
+  // curl-noise ambient injection — sample the gradient of an fBm potential field
+  // on a sparse grid. Because vx = ∂ψ/∂y and vy = -∂ψ/∂x the field is
+  // divergence-free by construction, so no net drift accumulates over time.
   const t = context.time
-  const ambSources = [
-    { x: cols * (0.5 + 0.38 * Math.sin(t * 0.13)),       y: rows * (0.5 + 0.38 * Math.cos(t * 0.11)),       a: t * 0.41 },
-    { x: cols * (0.5 + 0.38 * Math.cos(t * 0.17 + 2.1)), y: rows * (0.5 + 0.38 * Math.sin(t * 0.19 + 2.1)), a: t * 0.37 + 2.1 },
-    { x: cols * (0.5 + 0.20 * Math.sin(t * 0.29 + 4.2)), y: rows * (0.5 + 0.20 * Math.cos(t * 0.23 + 4.2)), a: t * 0.53 + 4.2 },
-  ]
-  for (const src of ambSources) {
-    const si = Math.round(src.x), sj = Math.round(src.y)
-    if (si < 1 || si >= cols - 1 || sj < 1 || sj >= rows - 1) continue
-    for (let dj = -RADIUS; dj <= RADIUS; dj++) {
-      for (let di = -RADIUS; di <= RADIUS; di++) {
-        if (di * di + dj * dj > RADIUS * RADIUS) continue
-        const ci = si + di, cj = sj + dj
-        if (ci < 1 || ci >= cols - 1 || cj < 1 || cj >= rows - 1) continue
-        const idx = cj * cols + ci
-        densityPrev[idx] += AMB_SRC
-        vxPrev[idx]      += Math.cos(src.a) * AMB_FORCE
-        vyPrev[idx]      += Math.sin(src.a) * AMB_FORCE
-      }
+  const h = 0.5   // finite-difference step for gradient approximation
+  for (let j = 1; j < rows - 1; j += CURL_STEP) {
+    for (let i = 1; i < cols - 1; i += CURL_STEP) {
+      // normalise to roughly [0, 2π] so fbm sees a consistent scale
+      const nx = (i / cols) * 6.28
+      const ny = (j / rows) * 6.28
+      // curl: vx = ∂ψ/∂y,  vy = -∂ψ/∂x
+      const curlX =  (fbm(nx, ny + h, t) - fbm(nx, ny - h, t)) / (2 * h)
+      const curlY = -(fbm(nx + h, ny, t) - fbm(nx - h, ny, t)) / (2 * h)
+      const idx = j * cols + i
+      vxPrev[idx]      += curlX * AMB_FORCE
+      vyPrev[idx]      += curlY * AMB_FORCE
+      densityPrev[idx] += AMB_SRC
     }
   }
 
@@ -112,11 +126,14 @@ export function pre(context, cursor) {
     advect(density, densityPrev, vx, vy, DT, cols, rows)
   }
 
-  // decay previous buffers
+  // decay previous buffers and apply gentle density decay to prevent saturation
   for (let i = 0; i < cols * rows; i++) {
     vxPrev[i]      *= 0.8
     vyPrev[i]      *= 0.8
     densityPrev[i] *= 0.8
+    density[i]     *= DECAY
+    vx[i]          *= VEL_DECAY
+    vy[i]          *= VEL_DECAY
   }
 }
 

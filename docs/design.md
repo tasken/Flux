@@ -1,7 +1,7 @@
 # webart — Design Spec
 
-**Date:** 2026-04-01  
-**Status:** Approved
+**Date:** 2026-04-02  
+**Status:** Current
 
 ---
 
@@ -25,13 +25,20 @@ A personal creative playground for generative, interactive fluid art rendered as
 
 ```
 ~/webArt/
-├── index.html        ← fullscreen ABC output canvas, imports sketch
+├── index.html           ← fullscreen pre#abc, imports main.js
 ├── src/
-│   └── sketch.js     ← the only file the user edits
+│   ├── main.js          ← entry: run(sketch)
+│   ├── sketch.js        ← ABC lifecycle hooks + fluid state + curl-noise injection
+│   ├── fluid.js         ← pure Navier-Stokes solver (addSource, diffuse, advect, project)
+│   ├── map.js           ← pure visual mapping (flowChar, densityColor, speedWeight)
+│   ├── fluid.test.js    ← solver unit tests
+│   └── map.test.js      ← visual mapping unit tests
+├── vendor/
+│   └── play.core/       ← vendored ABC library (gitignored)
 ├── docs/
-│   └── design.md     ← this file
-├── vite.config.js    ← minimal config, no plugins needed
-└── package.json      ← deps: abc-js, vite
+│   └── design.md        ← this file
+├── vite.config.js       ← dev server config (host, port, optimizeDeps)
+└── package.json         ← deps: vite (dev); vitest (test)
 ```
 
 ---
@@ -41,32 +48,27 @@ A personal creative playground for generative, interactive fluid art rendered as
 ABC provides the character grid loop. The sketch exports four lifecycle hooks:
 
 ### `boot({ cols, rows })`
-Runs once before the first frame. Allocates the fluid simulation grids:
-- `vel` — `Float32Array(cols * rows * 2)` for vx, vy per cell
-- `density` — `Float32Array(cols * rows)` for fluid density per cell
-- `velPrev` / `densityPrev` — scratch buffers for the solver
+Runs once before the first frame. Allocates eight `Float32Array(cols × rows)` buffers:
+`density`, `densityPrev`, `vx`, `vy`, `vxPrev`, `vyPrev`, `p` (pressure scratch), `div` (divergence scratch).
+
+Seeds the field with a curl-noise pattern (sin/cos of normalised grid coords) so there is visible motion from frame one.
 
 ### `pre(context, cursor)`
-Runs once per frame before `main()`. Responsible for:
-1. Injecting density and velocity at the cursor position (interactive)
-2. Running the Navier-Stokes solver **twice** (two full passes of diffuse → advect → project)
+Runs once per frame before `main()`. Steps in order:
 
-Two solver passes per frame improve stability and produce richer vortex behaviour without a meaningful performance cost on a ~5000-cell char grid.
+1. **Curl-noise injection** — every `CURL_STEP=6` cells, approximate the curl of an fBm potential field via finite differences (`vx = ∂ψ/∂y`, `vy = -∂ψ/∂x`). Divergence-free by construction: no net drift accumulates over time.
+2. **Cursor injection** — density burst + velocity impulse in a radius-3 disc at cursor position; 3× stronger on mouse-down.
+3. **Solver** — runs `PASSES=2` full Navier-Stokes passes (velocity step + density step each pass).
+4. **Decay** — `vxPrev/vyPrev/densityPrev *= 0.8` (source buffer drain); `density *= 0.997` (long-term saturation guard); `vx/vy *= 0.988` (linear drag — keeps speed bounded, prevents all-arrow lock-in).
 
-### `main(coord, context, cursor)`
-Runs once per cell per frame. Reads from the fluid state and returns a styled character:
+### `main(coord, context)`
+Runs once per cell per frame. Returns a styled character from `map.js`:
 
 ```js
-export function main({ x, y }, { cols }) {
-  const i   = y * cols + x
-  const d   = density[i]
-  const vx  = vel[i * 2]
-  const vy  = vel[i * 2 + 1]
-  return {
-    char:       flowChar(vx, vy),
-    color:      densityColor(d, vx, vy),
-    fontWeight: speedWeight(vx, vy),
-  }
+return {
+  char:       flowChar(density[i], vx[i], vy[i]),
+  color:      densityColor(density[i], vx[i], vy[i]),
+  fontWeight: speedWeight(vx[i], vy[i]),
 }
 ```
 
@@ -83,18 +85,23 @@ Based on *Real-Time Fluid Dynamics for Games* (Stam, GDC 1999). Each solver pass
 2. **Advect** — move values along the velocity field using bilinear interpolation
 3. **Project** — enforce divergence-free flow (prevents energy blow-up); also uses Gauss-Seidel
 
-Boundary conditions: wrap or clamp at grid edges (configurable).
+Boundary conditions: velocity uses clamped `setBounds` (no-slip at walls); pressure uses averaged `setBounds`. The `project` step does **not** apply `setBounds` to the post-projection velocity (physically correct: enforcing divergence-free is sufficient).
+
+Solver is in `src/fluid.js` — all pure functions, no global state, fully unit-tested.
 
 ---
 
-## Character Visual Mapping
+## Character Visual Mapping (`src/map.js`)
+
+All three functions are pure (no side effects) and unit-tested.
 
 | Fluid signal | Visual property | Detail |
 |---|---|---|
-| Velocity angle | Character | 8-direction set: `· - \| / \ ↗ ↘ ↙ ↖` |
-| Velocity magnitude | `fontWeight` | `300` (slow) → `700` (fast) |
-| Density | Color brightness | `hsl(h, 80%, density * 60%)` |
-| Vorticity (curl of vel) | Hue | Clockwise → warm (orange/red), counter → cool (blue/cyan) |
+| Density | Character (low speed) | 16-char ramp `' ·.-~:+ca01OX#@$'` — sparse → dense |
+| Velocity direction | Character (high speed) | 8-direction arrows `→ ↘ ↓ ↙ ← ↖ ↑ ↗` when `speed > 0.3` |
+| Velocity magnitude | `fontWeight` | `300` (still) / `400` (medium) / `700` (fast) |
+| Density | Lightness | `hsl(h, 55%, density * 60%)` — dark background, bright dense regions |
+| Vorticity `(vy − vx)` | Hue | Base 210° (cool blue) ± 45° — subtle breath of colour, no strobing |
 
 ---
 

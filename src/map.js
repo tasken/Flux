@@ -43,9 +43,13 @@ export function flowChar(density, vx, vy) {
  */
 export function densityColor(density, vx, vy) {
   const vorticity = vy - vx
-  const hue = ((Math.round(200 + vorticity * 120) % 360) + 360) % 360
-  const sat = Math.round(60 + Math.min(density, 1) * 40)
-  const lightness = Math.round(Math.min(density, 1) * 80)
+  // Narrow hue range: base 210 (cool blue) ± 45° driven by vorticity.
+  // Small multiplier keeps hue stable; the scene breathes rather than strobes.
+  const hue = ((Math.round(210 + vorticity * 45) % 360) + 360) % 360
+  // Fixed saturation — avoids colour "popping" as density fluctuates.
+  const sat = 55
+  // Lightness 0–60% (was 0–80%): stays darker, more atmospheric.
+  const lightness = Math.round(Math.min(density, 1) * 60)
   return `hsl(${hue}, ${sat}%, ${lightness}%)`
 }
 
