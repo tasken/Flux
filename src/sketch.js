@@ -35,6 +35,7 @@ uniform vec2      u_pointerDelta;
 uniform float     u_pointerActive;
 uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
+uniform float     u_seed;          // random offset so each page load is unique
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
 // Perceptually uniform: equal L steps look equally bright regardless of hue.
@@ -70,32 +71,38 @@ float procValue(vec2 uv, float t) {
   float px = uv.x, py = uv.y;
   float ox, oy;
 
-  // Pass 0: s=1.7, r=0.30, ti=t*0.40
+  // Golden ratio & sqrt(2) give irrational frequency ratios → the combined
+  // waveform never exactly repeats (incommensurate periods).
+  const float PHI = 1.6180339887;
+  const float SQ2 = 1.4142135624;
+
+  // Domain warp — three passes with irrational time multipliers
   ox = px; oy = py;
-  px += sin(oy * 1.7 + t * 0.40) * 0.30;
-  py += cos(ox * 1.7 + t * 0.52) * 0.30;
+  px += sin(oy * 1.7 + t * 0.40 * PHI) * 0.30;
+  py += cos(ox * 1.7 + t * 0.40 * SQ2) * 0.30;
 
-  // Pass 1: s=2.3, r=0.25, ti=t*0.55
   ox = px; oy = py;
-  px += sin(oy * 2.3 + t * 0.55) * 0.25;
-  py += cos(ox * 2.3 + t * 0.715) * 0.25;
+  px += sin(oy * 2.3 + t * 0.55 * SQ2) * 0.25;
+  py += cos(ox * 2.3 + t * 0.55 * PHI) * 0.25;
 
-  // Pass 2: s=2.9, r=0.20, ti=t*0.70
   ox = px; oy = py;
-  px += sin(oy * 2.9 + t * 0.70) * 0.20;
-  py += cos(ox * 2.9 + t * 0.91) * 0.20;
+  px += sin(oy * 2.9 + t * 0.70 * PHI) * 0.20;
+  py += cos(ox * 2.9 + t * 0.70 * SQ2) * 0.20;
 
-  // Wave interference — 4 layers at different orientations and speeds.
-  float v1 = sin(px * 4.0 + t * 1.4);
-  float v2 = cos(py * 3.5 - t * 1.1);
-  float v3 = sin((px + py) * 2.8 + t * 0.9);
-  float v4 = cos(length(vec2(px, py)) * 5.0 - t * 2.0);
+  // Wave interference — 5 layers with mutually irrational speeds.
+  float v1 = sin(px * 4.0 + t * PHI);
+  float v2 = cos(py * 3.5 - t * SQ2);
+  float v3 = sin((px + py) * 2.8 + t * 0.9 * PHI);
+  float v4 = cos(length(vec2(px, py)) * 5.0 - t * 1.7 * SQ2);
+  float v5 = sin(px * 1.3 - py * 0.7 + t * 0.31 * PHI); // slow cross-axis drift
 
-  return (v1 + v2 + v3 + v4) * 0.25;
+  return (v1 + v2 + v3 + v4 + v5) * 0.2;
 }
 
 vec2 toSceneUV(vec2 point) {
-  vec2 gridPoint = point * u_gridSize;
+  // pointer is [0,1] over the canvas; map directly to cell coords then to
+  // the same centered space the main loop uses for uv.
+  vec2 gridPoint = point * u_gridSize;                 // cell coords [0, gridSize]
   float m = min(u_gridSize.x, u_gridSize.y);
   return 2.0 * (gridPoint - u_gridSize * 0.5) / m;
 }
@@ -128,8 +135,8 @@ void main() {
   float fSpeed   = fluid.a;                       // [0, 1]
 
   // ── Procedural background (gentle ambient motion) ──
-  float t     = u_time * 0.0006;
-  float bgVal = procValue(uv, t) * 0.25;          // subtle background
+  float t     = u_time * 0.0006 + u_seed;
+  float bgVal = procValue(uv, t) * 0.65;          // bold ambient backdrop
 
   // ── Warp UV by fluid velocity for organic distortion ──
   uv += vec2(fVx, fVy) * 0.4;
@@ -143,6 +150,7 @@ void main() {
   float pointerDist = distance(uv, pointerUV);
   float pointerGlow = u_pointerActive * smoothstep(0.42, 0.0, pointerDist);
   float pointerBurst = u_pointerDown * smoothstep(0.22, 0.0, pointerDist);
+  uv += pointerFlow * pointerGlow * 0.6;
   value += pointerGlow * 0.2 + pointerBurst * 0.3;
 
   value = clamp(value, -1.0, 1.0);
@@ -157,11 +165,16 @@ void main() {
   float alpha  = texture2D(u_atlas, atlasUV).a;
 
   // ── Color: OKLch driven by fluid velocity + density ──
-  // Hue rotates with vorticity (fVy - fVx), base cool-blue
+  // Cold palette: hue locked to blue → cyan → purple range (~3.4 – 5.2 rad)
   float vorticity = fVy - fVx;
-  float hueRad    = mod(3.6652 + vorticity * 1.2 + pointerGlow * 0.3 + pointerBurst * 0.6, 6.2832);
-  float chroma    = 0.08 + fSpeed * 0.08 + pointerGlow * 0.02 + pointerBurst * 0.03;
-  float Lum       = min(d * 0.65 + fSpeed * 0.1 + pointerGlow * 0.08 + pointerBurst * 0.12, 0.92);
+  float hueBase   = t * 0.13 + vorticity * 1.2 + bgVal * 0.5
+                    + pointerGlow * 0.3 + pointerBurst * 0.6;
+  // Map to cold band: center at 4.3 rad (≈blue-cyan), swing ±0.9
+  float hueRad    = 4.3 + sin(hueBase) * 0.9;
+  float chroma    = 0.18 + abs(bgVal) * 0.10 + fSpeed * 0.14
+                    + pointerGlow * 0.05 + pointerBurst * 0.06;
+  float Lum       = min(d * 0.88 + fSpeed * 0.15
+                        + pointerGlow * 0.10 + pointerBurst * 0.14, 0.95);
   vec3  rgb       = oklch2rgb(Lum, chroma, hueRad);
 
   // Character pixels are colored; background is black

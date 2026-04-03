@@ -94,16 +94,7 @@ async function boot() {
   }
 
   function handleResize() {
-    renderer.resize()
-    // Read grid size back from the canvas to size the simulation
-    const dpr = window.devicePixelRatio || 1
-    const w = canvas.clientWidth * dpr
-    const h = canvas.clientHeight * dpr
-    // charWidth/charHeight aren't exposed, so estimate from fontSize * dpr
-    const estCharW = Math.round(config.fontSize * dpr * 0.62)
-    const estCharH = Math.round(config.fontSize * dpr * 1.35)
-    const cols = Math.max(4, Math.floor(w / estCharW))
-    const rows = Math.max(4, Math.floor(h / estCharH))
+    const { cols, rows } = renderer.resize()
     if (!sim) {
       sim = createSimulation(cols, rows)
     } else {
@@ -141,7 +132,7 @@ async function boot() {
   canvas.addEventListener('pointerdown', handlePointerDown)
   window.addEventListener('pointerup', handlePointerUp)
 
-  renderer.resize()
+  handleResize()
   rafId = requestAnimationFrame(frame)
 
   if (import.meta.hot) {

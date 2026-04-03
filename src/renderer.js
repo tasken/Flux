@@ -15,6 +15,7 @@ const UNIFORM_NAMES = [
   'u_pointerActive',
   'u_pointerDown',
   'u_fluid',
+  'u_seed',
 ]
 
 // ── shader compilation ────────────────────────────────────────────────────────
@@ -153,6 +154,11 @@ export function createRenderer(canvas, opts) {
   bindAtlas()
   bindFluid()
 
+  // Random seed set once per session — offsets time so each load looks different
+  const seed = Math.random() * 1e5
+  gl.useProgram(program)
+  gl.uniform1f(u.u_seed, seed)
+
   return {
     resize() {
       const nextDpr = window.devicePixelRatio || 1
@@ -174,6 +180,8 @@ export function createRenderer(canvas, opts) {
       gl.uniform2f(u.u_resolution, canvas.width, canvas.height)
       gl.uniform2f(u.u_gridSize, cols, rows)
       gl.uniform2f(u.u_cellSize, atlas.charWidth, atlas.charHeight)
+
+      return { cols, rows }
     },
 
     draw(time, pointer = {}) {
@@ -210,6 +218,8 @@ export function createRenderer(canvas, opts) {
       Object.assign(u, getUniforms(gl, program, UNIFORM_NAMES))
       bindAtlas()
       bindFluid()
+      gl.useProgram(program)
+      gl.uniform1f(u.u_seed, seed)
       this.resize()
     },
 
