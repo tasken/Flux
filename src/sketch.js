@@ -180,7 +180,7 @@ void main() {
 
     // Soft glow: sample neighbours with slight offset for a halo
     float glow = 0.0;
-    vec2 texel = 1.0 / vec2(512.0, 128.0);  // word canvas texel size
+    vec2 texel = 1.0 / vec2(1024.0, 64.0);  // word canvas texel size
     for (float gx = -2.0; gx <= 2.0; gx += 1.0) {
       for (float gy = -2.0; gy <= 2.0; gy += 1.0) {
         vec2 off = vec2(gx, gy) * texel * 1.5;
