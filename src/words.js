@@ -1,11 +1,9 @@
-// Word emergence — split-flap cycler whose bitmap is sampled by the GPU shader
-// with noise-warped UVs so words rise from and dissolve into the procedural field.
-//
-// LINES is a sequential script — each entry appears once in order, then loops.
+// Word emergence — split-flap cycler rendered as a small bitmap.
+// The GPU shader samples this bitmap scaled to fill the entire screen,
+// creating HUGE background letters made of smaller density characters.
+// Inspired by the ertdfgcvb.xyz departure-board + giant-letter effect.
 
-import {
-  wordCanvas, wordFontPx, wordFlapStagger, fontFamily,
-} from './settings.js'
+import { wordFlapStagger, wordFlapFrameSkip, wordCanvasW, wordCanvasH, fontFamily } from './settings.js'
 
 const LINES = [
   'WE LEFT ALL THE PAIN BEHIND',
@@ -22,75 +20,111 @@ const LINES = [
 
 const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?\'"0123456789-'
 
+const W = wordCanvasW, H = wordCanvasH
+
 export function createWordCycler() {
   let wordIndex  = 0
   let frameCount = 0
-  let animating  = false
+  let phase      = 'arrive'
 
-  const current = []   // current alphabet index per letter
-  const target  = []   // target alphabet index per letter
-  const delay   = []   // staggered start delay per letter
+  const current = []
+  const target  = []
+  const next    = []
+  const delay   = []
 
-  // Wider canvas for full lyric lines — bilinear GPU sampling smooths it
   const canvas = document.createElement('canvas')
-  canvas.width  = wordCanvas.width
-  canvas.height = wordCanvas.height
+  canvas.width  = W
+  canvas.height = H
   const ctx = canvas.getContext('2d')
 
-  function pickNextWord() {
-    const word = LINES[wordIndex % LINES.length].toUpperCase()
+  function getLineChars(idx) {
+    const word = LINES[idx % LINES.length].toUpperCase()
+    return Array.from(word, ch => {
+      const i = ALPHABET.indexOf(ch)
+      return i >= 0 ? i : 0
+    })
+  }
+
+  function loadLine() {
+    const chars     = getLineChars(wordIndex)
+    const nextChars = getLineChars(wordIndex + 1)
     wordIndex++
 
-    while (current.length < word.length) current.push(0)
-    while (current.length > word.length) current.pop()
-    target.length = word.length
-    delay.length  = word.length
+    const maxLen = Math.max(chars.length, nextChars.length)
+    while (current.length < maxLen) current.push(0)
+    current.length = maxLen
+    target.length  = maxLen
+    next.length    = maxLen
+    delay.length   = maxLen
 
-    for (let i = 0; i < word.length; i++) {
-      const idx = ALPHABET.indexOf(word[i])
-      target[i] = idx >= 0 ? idx : 0
+    for (let i = 0; i < maxLen; i++) {
+      target[i] = i < chars.length ? chars[i] : 0
+      next[i]   = i < nextChars.length ? nextChars[i] : 0
       delay[i]  = i * wordFlapStagger
     }
-    animating = true
+    phase = 'arrive'
   }
 
   function stepFlap() {
-    if (!animating) return
-    let done = true
-    for (let i = 0; i < target.length; i++) {
-      if (delay[i] > 0) {
-        delay[i]--
-        done = false
-      } else if (current[i] !== target[i]) {
-        current[i] = (current[i] + 1) % ALPHABET.length
-        done = false
+    if (phase === 'arrive') {
+      let allArrived = true
+      for (let i = 0; i < target.length; i++) {
+        if (delay[i] > 0) { delay[i]--; allArrived = false; continue }
+        if (current[i] !== target[i]) {
+          current[i] = (current[i] + 1) % ALPHABET.length
+          allArrived = false
+        }
       }
+      if (allArrived) {
+        phase = 'depart'
+        for (let i = 0; i < target.length; i++) {
+          delay[i] = i * wordFlapStagger
+        }
+      }
+    } else {
+      let allDone = true
+      for (let i = 0; i < target.length; i++) {
+        if (delay[i] > 0) { delay[i]--; allDone = false; continue }
+        if (current[i] !== next[i]) {
+          current[i] = (current[i] + 1) % ALPHABET.length
+          allDone = false
+        }
+      }
+      if (allDone) loadLine()
     }
-    if (done) animating = false
   }
 
   function render() {
-    const { width, height } = canvas
-    ctx.clearRect(0, 0, width, height)
+    ctx.clearRect(0, 0, W, H)
     const word = current.map(i => ALPHABET[i]).join('')
-    ctx.font = `bold ${wordFontPx}px ${fontFamily}`
+
+    // Start with ideal font size, scale down if text overflows canvas width
+    const idealSize = H * 0.82
+    ctx.font = `bold ${idealSize}px ${fontFamily}`
+    const measured = ctx.measureText(word)
+    const scale = Math.min(1, (W * 0.94) / (measured.width || 1))
+    if (scale < 1) ctx.font = `bold ${idealSize * scale}px ${fontFamily}`
+
+    // Use real font metrics for vertical centering when available
+    const m  = ctx.measureText(word)
+    const asc  = m.fontBoundingBoxAscent  ?? idealSize * scale * 0.78
+    const desc = m.fontBoundingBoxDescent ?? idealSize * scale * 0.22
+    const yOff = (H - (asc + desc)) / 2 + asc
+
+    ctx.textBaseline = 'alphabetic'
     ctx.textAlign    = 'center'
-    ctx.textBaseline = 'middle'
     ctx.fillStyle    = '#fff'
-    ctx.fillText(word, width / 2, height / 2)
+    ctx.fillText(word, W / 2, yOff)
   }
 
-  /** Call once per frame. Returns the canvas to upload as a GPU texture. */
+  /** Call once per frame. Returns the canvas for GPU texture upload. */
   function update() {
-    // Advance to next line only after the flap scan completes
-    if (!animating) pickNextWord()
-    if (animating && frameCount++ % 2 === 0) stepFlap()
+    if (frameCount++ % wordFlapFrameSkip === 0) stepFlap()
     render()
     return canvas
   }
 
-  // Kick off the first word immediately
-  pickNextWord()
+  loadLine()
   render()
 
   return { update, canvas }

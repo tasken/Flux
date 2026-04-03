@@ -5,10 +5,9 @@
 // └─────────────────────────────────────────────────────────────────────────────┘
 
 import {
-  fontSize, fontFamily, chars,
-  wordCanvas, wordBreathSpeed,
-  wordWarpX, wordWarpY, wordBoost, wordGlow, wordGlowRadius,
+  fontSize, fontFamily, chars, densityChars,
   fieldTimeScale, fieldAmplitude,
+  wordCanvasW, wordCanvasH,
 } from './settings.js'
 
 export const config = { fontSize, fontFamily, chars }
@@ -35,14 +34,14 @@ uniform vec2      u_resolution; // canvas size in device pixels
 uniform vec2      u_gridSize;   // columns, rows
 uniform vec2      u_cellSize;   // cell size in device pixels
 uniform sampler2D u_atlas;       // font texture atlas
-uniform float     u_charCount;   // number of characters in atlas
+uniform float     u_charCount;   // number of characters in atlas (total)
 uniform vec2      u_pointer;     // normalized pointer position, top-left origin
 uniform vec2      u_pointerDelta;
 uniform float     u_pointerActive;
 uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
 uniform float     u_seed;          // random offset so each page load is unique
-uniform sampler2D u_wordTex;       // word bitmap (split-flap cycler output)
+uniform sampler2D u_wordTex;       // word bitmap (small canvas, scaled to fill screen)
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
 // Perceptually uniform: equal L steps look equally bright regardless of hue.
@@ -160,61 +159,36 @@ void main() {
   value += pointerGlow * 0.2 + pointerBurst * 0.3;
   value += dot(pointerFlow, uv - pointerUV) * pointerGlow * 0.6;
 
-  // ── Word emergence: noise-warped bitmap sampling ──
-  // Words live inside the liquid as subtle density variations.
-  // A soft glow halo trails behind the breathing warp.
-  {
-    // Use the fluid-warped UV → back to pixel space from screen center.
-    // This makes word text flow with the fluid distortion.
-    vec2 warpedCell = (uv * m * 0.5) + u_gridSize * 0.5;
-    vec2 warpedPx   = warpedCell * u_cellSize;
-    vec2 centerOff  = warpedPx - u_resolution * 0.5;
-
-    // Screen-relative fit scale — text adapts to any window size
-    float fitScale = min(u_resolution.x / 1200.0, u_resolution.y / 200.0);
-    // Gentle breathing oscillation
-    fitScale *= 1.0 + 0.08 * cos(t * ${g(wordBreathSpeed)});
-
-    vec2 texSize = vec2(${g(wordCanvas.width)}, ${g(wordCanvas.height)});
-    vec2 scaledTex = texSize * fitScale;
-
-    // Noise warp in pixel space (uniform distortion on both axes)
-    float normX = centerOff.x / scaledTex.x;
-    float normY = centerOff.y / scaledTex.y;
-    float wxPx = sin(normY * 6.0 + t * 0.7) * ${g(wordWarpX)} * scaledTex.x;
-    float wyPx = cos(normX * 6.0 + t * 0.9) * ${g(wordWarpY)} * scaledTex.y;
-    vec2 wuv = (centerOff + vec2(wxPx, wyPx)) / scaledTex + 0.5;
-
-    // Only sample inside texture bounds; outside → 0
-    float inBounds = step(0.0, wuv.x) * step(wuv.x, 1.0)
-                   * step(0.0, wuv.y) * step(wuv.y, 1.0);
-    float wordSample = texture2D(u_wordTex, wuv).r * inBounds;
-
-    // Soft glow: sample neighbours with slight offset for a halo
-    float glow = 0.0;
-    vec2 texel = 1.0 / texSize;
-    for (float gx = -2.0; gx <= 2.0; gx += 1.0) {
-      for (float gy = -2.0; gy <= 2.0; gy += 1.0) {
-        vec2 off = vec2(gx, gy) * texel * ${g(wordGlowRadius)};
-        vec2 guv = wuv + off;
-        float gBounds = step(0.0, guv.x) * step(guv.x, 1.0)
-                      * step(0.0, guv.y) * step(guv.y, 1.0);
-        glow += texture2D(u_wordTex, guv).r * gBounds;
-      }
-    }
-    glow /= 25.0;  // average of 5×5 samples
-
-    // Subtle: letters are gentle density ripples inside the fluid
-    value += wordSample * ${g(wordBoost)};
-    // Trailing glow — even softer, lingers around letter shapes
-    value += glow * ${g(wordGlow)};
-  }
-
   value = clamp(value, -1.0, 1.0);
   float d = (value + 1.0) * 0.5;                  // [0, 1]
 
-  // Map value → character index in the atlas
-  float charIdx = clamp(floor(d * u_charCount), 0.0, u_charCount - 1.0);
+  // ── Giant background letters (ertdfgcvb-style) ──
+  // Scale the word bitmap to fill the whole grid and warp it with noise.
+  // The bitmap's brightness drives the background density → huge letters
+  // emerge from the character field.
+  float aspect = (u_gridSize.x / u_gridSize.y)
+               * (${g(wordCanvasH)} / ${g(wordCanvasW)});  // grid aspect / tex aspect
+  vec2 wuv;
+  if (aspect < 1.0) {
+    // Grid is taller than texture — fit to width
+    wuv = vec2(cell.x / u_gridSize.x,
+               (cell.y / u_gridSize.y - 0.5) * aspect + 0.5);
+  } else {
+    // Grid is wider than texture — fit to height
+    wuv = vec2((cell.x / u_gridSize.x - 0.5) / aspect + 0.5,
+               cell.y / u_gridSize.y);
+  }
+  // Noise warp for organic distortion
+  float warpAmt = 0.6 + 0.3 * cos(t * 0.7);
+  wuv.x += warpAmt * (procValue(wuv * 3.0, t * 0.5) * 0.15);
+  wuv.y += warpAmt * (procValue(wuv * 3.0 + 7.0, t * 0.5) * 0.15);
+
+  float wordSample = texture2D(u_wordTex, clamp(wuv, 0.0, 1.0)).r;
+  // Blend word shape into density
+  d = mix(d, max(d, 0.9), wordSample);
+
+  // Map density → character index (using density chars)
+  float charIdx = clamp(floor(d * ${g(densityChars.length)}), 0.0, ${g(densityChars.length - 1)});
 
   // Local UV within this cell → sample the font atlas
   vec2 localUV = fract(fc / u_cellSize);
@@ -236,6 +210,7 @@ void main() {
                     + pointerGlow * 0.05 + pointerBurst * 0.06;
   float Lum       = min(d * 0.88 + fSpeed * 0.15
                         + pointerGlow * 0.10 + pointerBurst * 0.14, 0.95);
+
   vec3  rgb       = oklch2rgb(Lum, chroma, hueRad);
 
   gl_FragColor = vec4(rgb * alpha, 1.0);

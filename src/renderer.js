@@ -79,7 +79,12 @@ function createAtlas(gl, chars, fontSize, fontFamily) {
     charWidth = Math.max(charWidth, Math.ceil(tctx.measureText(ch).width))
   }
   if (charWidth === 0) charWidth = Math.ceil(tctx.measureText('M').width)
-  const charHeight = Math.ceil(fontSize * 1.35)
+
+  // Use real font metrics for accurate cell height (with fallback)
+  const mRef    = tctx.measureText('Mg|')
+  const ascent  = Math.ceil(mRef.fontBoundingBoxAscent  ?? fontSize * 0.85)
+  const descent = Math.ceil(mRef.fontBoundingBoxDescent ?? fontSize * 0.35)
+  const charHeight = ascent + descent
 
   const atlas = document.createElement('canvas')
   atlas.width  = charWidth * chars.length
@@ -88,10 +93,11 @@ function createAtlas(gl, chars, fontSize, fontFamily) {
   if (!ctx) throw new Error('2D canvas context not available for atlas rendering')
 
   ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textBaseline = 'middle'
+  ctx.textBaseline = 'alphabetic'
+  ctx.textAlign    = 'center'
   ctx.fillStyle = '#fff'
   for (let i = 0; i < chars.length; i++) {
-    ctx.fillText(chars[i], i * charWidth, charHeight * 0.5)
+    ctx.fillText(chars[i], i * charWidth + charWidth * 0.5, ascent)
   }
 
   const tex = gl.createTexture()
@@ -154,7 +160,7 @@ export function createRenderer(canvas, opts) {
     gl.uniform1i(u.u_fluid, 1)
   }
 
-  // Word bitmap texture (RGBA, rendered by words.js split-flap cycler)
+  // Word bitmap texture (small canvas scaled to fill the screen — LINEAR for smooth upscale)
   let wordTex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, wordTex)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)

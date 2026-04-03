@@ -2,7 +2,7 @@ import { createRenderer } from './renderer.js'
 import { vertexSource, fragmentSource, config } from './sketch.js'
 import { createSimulation } from './simulation.js'
 import { createWordCycler } from './words.js'
-import { pointerForce, pointerForceDown, pointerDensity, pointerDensityDown, pointerRadius } from './settings.js'
+import { pointerForce, pointerForceDown, pointerDensity, pointerDensityDown, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
 
 function showBootError(message) {
   let panel = document.getElementById('boot-error')
@@ -74,7 +74,7 @@ async function boot() {
   }
 
   function frame(now) {
-    if (pointer.active && now - lastMoveAt > 160) {
+    if (pointer.active && now - lastMoveAt > pointerIdleMs) {
       pointer.active = 0
     }
 
@@ -95,8 +95,8 @@ async function boot() {
     const wordCanvas = wordCycler.update()
     renderer.uploadWordTexture(wordCanvas)
 
-    pointer.dx *= 0.82
-    pointer.dy *= 0.82
+    pointer.dx *= pointerDeltaDecay
+    pointer.dy *= pointerDeltaDecay
     renderer.draw(now, pointer)
     rafId = requestAnimationFrame(frame)
   }
