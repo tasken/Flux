@@ -173,12 +173,14 @@ void main() {
 
     // Map to texture UV: at scale=1 one texture pixel = one screen pixel
     vec2 texSize = vec2(${g(wordCanvas.width)}, ${g(wordCanvas.height)});
-    vec2 wuv = pixCenter / (texSize * breathe) + 0.5;
+    vec2 scaledTex = texSize * breathe;
 
-    // Noise warp — displace UV for organic letter shapes
-    float wx = sin(wuv.y * 3.1 + t * 0.7) * ${g(wordWarpX)};
-    float wy = cos(wuv.x * 2.7 + t * 0.9) * ${g(wordWarpY)};
-    wuv += vec2(wx, wy);
+    // Noise warp in pixel space (uniform distortion on both axes)
+    float normX = pixCenter.x / scaledTex.x;
+    float normY = pixCenter.y / scaledTex.y;
+    float wxPx = sin(normY * 6.0 + t * 0.7) * ${g(wordWarpX)} * scaledTex.x;
+    float wyPx = cos(normX * 6.0 + t * 0.9) * ${g(wordWarpY)} * scaledTex.y;
+    vec2 wuv = (pixCenter + vec2(wxPx, wyPx)) / scaledTex + 0.5;
 
     // Only sample inside texture bounds; outside → 0
     float inBounds = step(0.0, wuv.x) * step(wuv.x, 1.0)

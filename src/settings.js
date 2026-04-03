@@ -14,8 +14,8 @@ export const wordFlapStagger = 6         // frame delay per letter position
 export const wordBreathMin   = 3.0       // zoom scale min (larger = bigger text on screen)
 export const wordBreathMax   = 4.5       // zoom scale max
 export const wordBreathSpeed = 1.1       // radians/time-unit
-export const wordWarpX       = 0.04      // noise warp amplitude X
-export const wordWarpY       = 0.06      // noise warp amplitude Y
+export const wordWarpX       = 0.008     // noise warp fraction of text width
+export const wordWarpY       = 0.012     // noise warp fraction of text height
 export const wordBoost       = 0.22      // how much letters push the field value
 export const wordGlow        = 0.12      // soft halo intensity around letters
 export const wordGlowRadius  = 1.5       // texel multiplier for blur kernel
