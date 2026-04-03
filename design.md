@@ -29,17 +29,14 @@ A personal creative playground for generative, interactive text-mode art rendere
 webArt/
 ├── index.html              ← fullscreen canvas, imports main.js
 ├── src/
-│   ├── main.js             ← entry: boot, pointer state, animation loop, mode switching
+│   ├── main.js             ← entry: boot, pointer state, animation loop
 │   ├── renderer.js         ← WebGL program, font atlas, fluid/word textures, resize/draw/dispose
 │   ├── sketch.js           ← GLSL shader sources, visual config, OKLch color
 │   ├── simulation.js       ← wraps CPU solver into frame-steppable sim with RGBA packing
-│   ├── words.js            ← split-flap word cycler (departure-board animation)
-│   └── cpu-solver/
-│       ├── fluid.js        ← pure Navier-Stokes solver (addSource, diffuse, advect, project)
-│       └── README.md       ← module documentation
-├── docs/
-│   ├── design.md           ← this file
-│   └── future.md           ← future improvements roadmap
+│   ├── fluid.js            ← pure Navier-Stokes solver (addSource, diffuse, advect, project)
+│   └── words.js            ← split-flap lyric cycler (word emergence)
+├── design.md               ← this file
+├── future.md               ← future improvements roadmap
 ├── .github/
 │   ├── workflows/deploy.yml← GitHub Pages deploy workflow
 │   └── instructions/       ← Copilot instruction files
@@ -156,7 +153,7 @@ GitHub Pages deployment is automated via `.github/workflows/deploy.yml`. On push
 ## Out of Scope (Current)
 
 - Multiple sketches / gallery
-- Full simulation-state persistence on the GPU (see `docs/future.md`)
+- Full simulation-state persistence on the GPU (see `future.md`)
 - Per-character size, rotation, opacity
 - Saving/sharing sketches
 - Mobile-specific interaction design

@@ -1,7 +1,7 @@
 // Wraps the CPU Navier-Stokes solver into a frame-steppable simulation.
 // Exposes density + velocity as a packed RGBA Uint8Array for GPU texture upload.
 
-import { addSource, diffuse, advect, project } from './cpu-solver/fluid.js'
+import { addSource, diffuse, advect, project } from './fluid.js'
 
 const DIFF = 0.00001   // diffusion rate
 const VISC = 0.00001   // viscosity
