@@ -38,7 +38,7 @@ describe('speedWeight', () => {
     expect(speedWeight(1, 0)).toBe(700)
   })
   it('returns 400 for mid speed', () => {
-    const w = speedWeight(0.5, 0)
-    expect([300, 400, 700]).toContain(w)
+    const w = speedWeight(0.3, 0)
+    expect(w).toBe(400)
   })
 })
