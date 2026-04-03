@@ -2,6 +2,21 @@
 // Renders a fullscreen quad whose fragment shader computes per-cell procedural
 // values and samples a font texture atlas to draw styled characters on the GPU.
 
+const FULLSCREEN_QUAD = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1])
+const UNIFORM_NAMES = [
+  'u_time',
+  'u_resolution',
+  'u_gridSize',
+  'u_cellSize',
+  'u_atlas',
+  'u_charCount',
+  'u_pointer',
+  'u_pointerDelta',
+  'u_pointerActive',
+  'u_pointerDown',
+  'u_fluid',
+]
+
 // ── shader compilation ────────────────────────────────────────────────────────
 
 function compile(gl, type, source) {
@@ -29,6 +44,22 @@ function link(gl, vs, fs) {
   return p
 }
 
+function getAttrib(gl, program, name) {
+  const location = gl.getAttribLocation(program, name)
+  if (location < 0) throw new Error(`Missing shader attribute: ${name}`)
+  return location
+}
+
+function getUniforms(gl, program, names) {
+  const locations = {}
+  for (const name of names) {
+    const location = gl.getUniformLocation(program, name)
+    if (location === null) throw new Error(`Missing shader uniform: ${name}`)
+    locations[name] = location
+  }
+  return locations
+}
+
 // ── font atlas ────────────────────────────────────────────────────────────────
 // Renders every character in `chars` into a single-row RGBA texture.
 // The alpha channel carries the antialiased glyph shape.
@@ -36,15 +67,21 @@ function link(gl, vs, fs) {
 function createAtlas(gl, chars, fontSize, fontFamily) {
   const tmp = document.createElement('canvas')
   const tctx = tmp.getContext('2d')
+  if (!tctx) throw new Error('2D canvas context not available for font atlas')
   tctx.font = `${fontSize}px ${fontFamily}`
 
-  const charWidth  = Math.ceil(tctx.measureText('M').width)
+  let charWidth = 0
+  for (const ch of chars) {
+    charWidth = Math.max(charWidth, Math.ceil(tctx.measureText(ch).width))
+  }
+  if (charWidth === 0) charWidth = Math.ceil(tctx.measureText('M').width)
   const charHeight = Math.ceil(fontSize * 1.35)
 
   const atlas = document.createElement('canvas')
   atlas.width  = charWidth * chars.length
   atlas.height = charHeight
   const ctx = atlas.getContext('2d')
+  if (!ctx) throw new Error('2D canvas context not available for atlas rendering')
 
   ctx.font = `${fontSize}px ${fontFamily}`
   ctx.textBaseline = 'middle'
@@ -68,44 +105,70 @@ function createAtlas(gl, chars, fontSize, fontFamily) {
 
 export function createRenderer(canvas, opts) {
   const { vertexSource, fragmentSource, fontSize, fontFamily, chars } = opts
+  if (!chars?.length) throw new Error('Renderer requires at least one character')
 
   const gl = canvas.getContext('webgl', { antialias: false, alpha: false })
   if (!gl) throw new Error('WebGL not available')
 
-  const dpr = window.devicePixelRatio || 1
-  const program = link(
+  let program = link(
     gl,
     compile(gl, gl.VERTEX_SHADER, vertexSource),
     compile(gl, gl.FRAGMENT_SHADER, fragmentSource),
   )
-  const atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily)
+  let dpr = window.devicePixelRatio || 1
+  let atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily)
 
   // fullscreen quad  (-1…1 clip space)
   const buf = gl.createBuffer()
+  if (!buf) throw new Error('Failed to allocate vertex buffer')
   gl.bindBuffer(gl.ARRAY_BUFFER, buf)
-  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW)
+  gl.bufferData(gl.ARRAY_BUFFER, FULLSCREEN_QUAD, gl.STATIC_DRAW)
 
-  const aPos = gl.getAttribLocation(program, 'a_position')
-  const u = {}
-  for (const name of ['u_time','u_resolution','u_gridSize','u_cellSize','u_atlas','u_charCount']) {
-    u[name] = gl.getUniformLocation(program, name)
+  let aPos = getAttrib(gl, program, 'a_position')
+  const u = getUniforms(gl, program, UNIFORM_NAMES)
+
+  function bindAtlas() {
+    gl.useProgram(program)
+    gl.activeTexture(gl.TEXTURE0)
+    gl.bindTexture(gl.TEXTURE_2D, atlas.tex)
+    gl.uniform1i(u.u_atlas, 0)
+    gl.uniform1f(u.u_charCount, chars.length)
   }
 
-  // one-time uniform setup
-  gl.useProgram(program)
-  gl.activeTexture(gl.TEXTURE0)
-  gl.bindTexture(gl.TEXTURE_2D, atlas.tex)
-  gl.uniform1i(u.u_atlas, 0)
-  gl.uniform1f(u.u_charCount, chars.length)
+  // Fluid data texture (RGBA, one texel per grid cell)
+  let fluidTex = gl.createTexture()
+  gl.bindTexture(gl.TEXTURE_2D, fluidTex)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+  function bindFluid() {
+    gl.useProgram(program)
+    gl.activeTexture(gl.TEXTURE1)
+    gl.bindTexture(gl.TEXTURE_2D, fluidTex)
+    gl.uniform1i(u.u_fluid, 1)
+  }
+
+  bindAtlas()
+  bindFluid()
 
   return {
     resize() {
+      const nextDpr = window.devicePixelRatio || 1
+      if (nextDpr !== dpr) {
+        dpr = nextDpr
+        gl.deleteTexture(atlas.tex)
+        atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily)
+        bindAtlas()
+      }
+
       canvas.width  = canvas.clientWidth  * dpr
       canvas.height = canvas.clientHeight * dpr
       gl.viewport(0, 0, canvas.width, canvas.height)
 
-      const cols = Math.floor(canvas.width  / atlas.charWidth)
-      const rows = Math.floor(canvas.height / atlas.charHeight)
+      const cols = Math.max(1, Math.floor(canvas.width  / atlas.charWidth))
+      const rows = Math.max(1, Math.floor(canvas.height / atlas.charHeight))
 
       gl.useProgram(program)
       gl.uniform2f(u.u_resolution, canvas.width, canvas.height)
@@ -113,12 +176,54 @@ export function createRenderer(canvas, opts) {
       gl.uniform2f(u.u_cellSize, atlas.charWidth, atlas.charHeight)
     },
 
-    draw(time) {
+    draw(time, pointer = {}) {
+      const {
+        x = 0.5,
+        y = 0.5,
+        dx = 0,
+        dy = 0,
+        active = 0,
+        down = 0,
+      } = pointer
+
+      gl.useProgram(program)
       gl.uniform1f(u.u_time, time)
+      gl.uniform2f(u.u_pointer, x, y)
+      gl.uniform2f(u.u_pointerDelta, dx, dy)
+      gl.uniform1f(u.u_pointerActive, active)
+      gl.uniform1f(u.u_pointerDown, down)
       gl.bindBuffer(gl.ARRAY_BUFFER, buf)
       gl.enableVertexAttribArray(aPos)
       gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+    },
+
+    recompile(newVertexSource, newFragmentSource) {
+      const newProgram = link(
+        gl,
+        compile(gl, gl.VERTEX_SHADER, newVertexSource),
+        compile(gl, gl.FRAGMENT_SHADER, newFragmentSource),
+      )
+      gl.deleteProgram(program)
+      program = newProgram
+      aPos = getAttrib(gl, program, 'a_position')
+      Object.assign(u, getUniforms(gl, program, UNIFORM_NAMES))
+      bindAtlas()
+      bindFluid()
+      this.resize()
+    },
+
+    uploadFluid(pixels, cols, rows) {
+      gl.activeTexture(gl.TEXTURE1)
+      gl.bindTexture(gl.TEXTURE_2D, fluidTex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    },
+
+    dispose() {
+      gl.deleteTexture(atlas.tex)
+      gl.deleteTexture(fluidTex)
+      gl.deleteBuffer(buf)
+      gl.deleteProgram(program)
     },
   }
 }
