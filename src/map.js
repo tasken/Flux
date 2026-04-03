@@ -29,9 +29,9 @@ export function flowChar(vx, vy) {
  */
 export function densityColor(density, vx, vy) {
   const vorticity = vy - vx
-  const hue = 200 + vorticity * 80
+  const hue = ((Math.round(200 + vorticity * 80) % 360) + 360) % 360
   const lightness = Math.round(Math.min(density, 1) * 60)
-  return `hsl(${Math.round(hue)}, 80%, ${lightness}%)`
+  return `hsl(${hue}, 80%, ${lightness}%)`
 }
 
 /**
