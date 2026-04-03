@@ -36,7 +36,6 @@ uniform float     u_pointerActive;
 uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
 uniform float     u_seed;          // random offset so each page load is unique
-uniform float     u_mode;          // 0 = procedural, 1 = words
 uniform sampler2D u_wordTex;       // word bitmap (split-flap cycler output)
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
@@ -155,24 +154,32 @@ void main() {
   value += pointerGlow * 0.2 + pointerBurst * 0.3;
   value += dot(pointerFlow, uv - pointerUV) * pointerGlow * 0.6;
 
-  // ── Words mode: word bitmap sampled through warped UVs ──
-  if (u_mode > 0.5) {
-    // Convert warped uv back to physical pixels from center
-    vec2 warpedCell = (uv * m * 0.5) + u_gridSize * 0.5;
-    vec2 warpedFc = warpedCell * u_cellSize;
-    vec2 centerOffset = warpedFc - (u_resolution * 0.5);
-    
-    // Scale texture to fit screen while maintaining its natural 512:128 (4:1) aspect ratio
-    float fitScale = min(u_resolution.x / 600.0, u_resolution.y / 200.0); 
-    vec2 wordUV = (centerOffset / (vec2(512.0, 128.0) * fitScale)) + 0.5;
-    
-    wordUV = clamp(wordUV, 0.0, 1.0);
-    float wordSample = texture2D(u_wordTex, wordUV).r;
+  // ── Word emergence: noise-warped bitmap sampling ──
+  // Words rise from the procedural field and dissolve back.
+  // Gentle domain warp on the texture UV makes letters breathe.
+  {
+    // Map cell to word texture UV space (centered)
+    vec2 wordCell = (cell + 0.5) / u_gridSize;   // [0,1] grid space
+    vec2 wuv = wordCell - 0.5;                    // center at 0
 
-    // Where the word bitmap is "on", push density high (dense chars);
-    // where "off", keep the ambient procedural value (sparse chars).
-    // The warp in uv makes the word distort and flow organically.
-    value = mix(bgVal * 0.35, 0.85 + bgVal * 0.15, wordSample);
+    // Breathing zoom — slow oscillation in word scale
+    float breathe = 1.2 + cos(t * 1.6) * 0.35;
+    wuv *= breathe;
+
+    // Noise warp — displace UV for organic letter shapes
+    float wx = sin(wuv.y * 3.1 + t * 0.7) * 0.04;
+    float wy = cos(wuv.x * 2.7 + t * 0.9) * 0.06;
+    wuv += vec2(wx, wy);
+
+    wuv += 0.5;   // back to [0,1]
+
+    // Only sample inside texture bounds; outside → 0
+    float inBounds = step(0.0, wuv.x) * step(wuv.x, 1.0)
+                   * step(0.0, wuv.y) * step(wuv.y, 1.0);
+    float wordSample = texture2D(u_wordTex, wuv).r * inBounds;
+
+    // Modulate: word bitmap *boosts* the existing field value
+    value += wordSample * 0.7;
   }
 
   value = clamp(value, -1.0, 1.0);

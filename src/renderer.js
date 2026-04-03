@@ -16,7 +16,6 @@ const UNIFORM_NAMES = [
   'u_pointerDown',
   'u_fluid',
   'u_seed',
-  'u_mode',
   'u_wordTex',
 ]
 
@@ -224,11 +223,6 @@ export function createRenderer(canvas, opts) {
       gl.enableVertexAttribArray(aPos)
       gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
-    },
-
-    setMode(mode) {
-      gl.useProgram(program)
-      gl.uniform1f(u.u_mode, mode)
     },
 
     recompile(newVertexSource, newFragmentSource) {
