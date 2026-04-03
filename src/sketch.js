@@ -1,157 +1,116 @@
-import { addSource, diffuse, advect, project } from './fluid.js'
-import { flowChar, densityColor, speedWeight } from './map.js'
+// ┌─────────────────────────────────────────────────────────────────────────────┐
+// │  sketch.js — the creative part.                                            │
+// │  Edit the fragment shader below to change the visual.                      │
+// │  Vite HMR will reload the browser on save.                                 │
+// └─────────────────────────────────────────────────────────────────────────────┘
 
-// ─── tuning constants ─────────────────────────────────────────────────────────
-const DIFF      = 0.0001   // diffusion rate
-const VISC      = 0.00001  // viscosity
-const DT        = 0.1      // timestep
-const FORCE     = 80       // velocity impulse magnitude on mouse move
-const SOURCE    = 12       // density injection amount on mouse move
-const RADIUS    = 3        // injection radius in cells
-const PASSES    = 2        // solver passes per frame
-const AMB_SRC   = 0.6      // ambient density per injected cell per frame
-const AMB_FORCE = 1.8      // ambient velocity impulse per cell (curl-noise)
-const CURL_STEP = 6        // inject curl noise every N cells
-const DECAY     = 0.997    // per-frame density decay to prevent saturation
-const VEL_DECAY = 0.988    // per-frame velocity decay (linear drag) — keeps speed bounded
-
-// ─── cheap fBm noise ─────────────────────────────────────────────────────────
-// Fractional Brownian motion via 3 sin/cos octaves — no external dep needed.
-// Returns a smooth scalar in roughly [-1, 1].
-function fbm(x, y, t) {
-  let v = 0, amp = 0.5, freq = 1
-  for (let oct = 0; oct < 3; oct++) {
-    v    += amp * Math.sin(x * freq + t * (0.07 + oct * 0.04))
-                * Math.cos(y * freq + t * (0.05 + oct * 0.03))
-    amp  *= 0.5
-    freq *= 2.1
-  }
-  return v
+export const config = {
+  fontSize:   12,
+  fontFamily: "'IBM Plex Mono', monospace",
+  chars:      ' ·.-~:+ca01OX#@',
 }
 
-// ─── simulation state ─────────────────────────────────────────────────────────
-let cols, rows
-let density, densityPrev
-let vx, vy, vxPrev, vyPrev
-let p, div  // scratch arrays for project()
+// ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
 
-export function boot(context) {
-  cols = context.cols
-  rows = context.rows
-  const N = cols * rows
-  density     = new Float32Array(N)
-  densityPrev = new Float32Array(N)
-  vx          = new Float32Array(N)
-  vy          = new Float32Array(N)
-  vxPrev      = new Float32Array(N)
-  vyPrev      = new Float32Array(N)
-  p   = new Float32Array(N)
-  div = new Float32Array(N)
+export const vertexSource = /* glsl */ `
+attribute vec2 a_position;
+void main() {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`
 
-  // Seed with a curl-noise pattern so there's immediate motion on load
-  for (let j = 1; j < rows - 1; j++) {
-    for (let i = 1; i < cols - 1; i++) {
-      const idx = j * cols + i
-      const nx = (i / cols) * Math.PI * 6
-      const ny = (j / rows) * Math.PI * 6
-      vx[idx] = Math.sin(ny) * Math.cos(nx * 0.5) * 0.4
-      vy[idx] = -Math.sin(nx) * Math.cos(ny * 0.5) * 0.4
-      density[idx] = Math.max(0, Math.sin(nx * 0.8) * Math.cos(ny * 0.8)) * 0.4
-    }
-  }
+// ── fragment shader (all the art happens here) ────────────────────────────────
+
+export const fragmentSource = /* glsl */ `
+precision highp float;
+
+uniform float     u_time;       // milliseconds since page load
+uniform vec2      u_resolution;  // canvas size in device pixels
+uniform vec2      u_gridSize;    // columns, rows
+uniform vec2      u_cellSize;    // cell size in device pixels
+uniform sampler2D u_atlas;       // font texture atlas
+uniform float     u_charCount;   // number of characters in atlas
+
+// ── HSL → RGB ─────────────────────────────────────────────────────────────────
+vec3 hsl2rgb(float h, float s, float l) {
+  float c  = (1.0 - abs(2.0 * l - 1.0)) * s;
+  float hp = h * 6.0;
+  float x  = c * (1.0 - abs(mod(hp, 2.0) - 1.0));
+  vec3 rgb;
+  if      (hp < 1.0) rgb = vec3(c, x, 0.0);
+  else if (hp < 2.0) rgb = vec3(x, c, 0.0);
+  else if (hp < 3.0) rgb = vec3(0.0, c, x);
+  else if (hp < 4.0) rgb = vec3(0.0, x, c);
+  else if (hp < 5.0) rgb = vec3(x, 0.0, c);
+  else                rgb = vec3(c, 0.0, x);
+  return rgb + l - c * 0.5;
 }
 
-export function pre(context, cursor) {
-  // curl-noise ambient injection — sample the gradient of an fBm potential field
-  // on a sparse grid. Because vx = ∂ψ/∂y and vy = -∂ψ/∂x the field is
-  // divergence-free by construction, so no net drift accumulates over time.
-  const t = context.time
-  const h = 0.5   // finite-difference step for gradient approximation
-  for (let j = 1; j < rows - 1; j += CURL_STEP) {
-    for (let i = 1; i < cols - 1; i += CURL_STEP) {
-      // normalise to roughly [0, 2π] so fbm sees a consistent scale
-      const nx = (i / cols) * 6.28
-      const ny = (j / rows) * 6.28
-      // curl: vx = ∂ψ/∂y,  vy = -∂ψ/∂x
-      const curlX =  (fbm(nx, ny + h, t) - fbm(nx, ny - h, t)) / (2 * h)
-      const curlY = -(fbm(nx + h, ny, t) - fbm(nx - h, ny, t)) / (2 * h)
-      const idx = j * cols + i
-      vxPrev[idx]      += curlX * AMB_FORCE
-      vyPrev[idx]      += curlY * AMB_FORCE
-      densityPrev[idx] += AMB_SRC
-    }
+// ── procedural value ──────────────────────────────────────────────────────────
+// Stateless: f(position, time) → scalar.  No state, no equilibrium, no staling.
+
+float procValue(vec2 uv, float t) {
+  float px = uv.x, py = uv.y;
+
+  // Domain warping — 3 passes of coordinate distortion.
+  // Turns simple sine waves into organic, fluid-like blobs.
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i);
+    float s  = 1.7 + fi * 0.6;
+    float r  = 0.3 - fi * 0.05;
+    float ti = t * (0.4 + fi * 0.15);
+    float ox = px, oy = py;
+    px += sin(oy * s + ti) * r;
+    py += cos(ox * s + ti * 1.3) * r;
   }
 
-  // inject fluid at cursor position
-  const cx = Math.round(cursor.x)
-  const cy = Math.round(cursor.y)
-  const strength = cursor.pressed ? 3 : 1
-  if (cx > 0 && cx < cols - 1 && cy > 0 && cy < rows - 1) {
-    const dx = cursor.x - cursor.p.x
-    const dy = cursor.y - cursor.p.y
-    for (let dj = -RADIUS; dj <= RADIUS; dj++) {
-      for (let di = -RADIUS; di <= RADIUS; di++) {
-        if (di * di + dj * dj > RADIUS * RADIUS) continue
-        const i = cx + di, j = cy + dj
-        if (i < 1 || i >= cols - 1 || j < 1 || j >= rows - 1) continue
-        const idx = j * cols + i
-        densityPrev[idx] += SOURCE * strength
-        vxPrev[idx]      += FORCE * dx * strength
-        vyPrev[idx]      += FORCE * dy * strength
-      }
-    }
-  }
+  // Wave interference — 4 layers at different orientations and speeds.
+  float v1 = sin(px * 4.0 + t * 1.4);                           // horizontal
+  float v2 = cos(py * 3.5 - t * 1.1);                           // vertical
+  float v3 = sin((px + py) * 2.8 + t * 0.9);                    // diagonal
+  float v4 = cos(length(vec2(px, py)) * 5.0 - t * 2.0);         // radial
 
-  // run solver PASSES times
-  for (let pass = 0; pass < PASSES; pass++) {
-    // velocity step
-    addSource(vx, vxPrev, DT)
-    addSource(vy, vyPrev, DT)
-    ;[vx, vxPrev] = [vxPrev, vx]
-    diffuse(vx, vxPrev, VISC, DT, cols, rows)
-    ;[vy, vyPrev] = [vyPrev, vy]
-    diffuse(vy, vyPrev, VISC, DT, cols, rows)
-    project(vx, vy, p, div, cols, rows)
-    ;[vx, vxPrev] = [vxPrev, vx]
-    ;[vy, vyPrev] = [vyPrev, vy]
-    advect(vx, vxPrev, vxPrev, vyPrev, DT, cols, rows)
-    advect(vy, vyPrev, vxPrev, vyPrev, DT, cols, rows)
-    project(vx, vy, p, div, cols, rows)
-
-    // density step
-    addSource(density, densityPrev, DT)
-    ;[density, densityPrev] = [densityPrev, density]  // diffuse reads prev, writes current
-    diffuse(density, densityPrev, DIFF, DT, cols, rows)
-    ;[density, densityPrev] = [densityPrev, density]  // advect reads prev, writes current
-    advect(density, densityPrev, vx, vy, DT, cols, rows)
-  }
-
-  // decay previous buffers and apply gentle density decay to prevent saturation
-  for (let i = 0; i < cols * rows; i++) {
-    vxPrev[i]      *= 0.8
-    vyPrev[i]      *= 0.8
-    densityPrev[i] *= 0.8
-    density[i]     *= DECAY
-    vx[i]          *= VEL_DECAY
-    vy[i]          *= VEL_DECAY
-  }
+  return (v1 + v2 + v3 + v4) * 0.25;                             // [-1, 1]
 }
 
-export function main({ x, y }, { cols }) {
-  const i   = y * cols + x
-  const d   = density[i]
-  const u   = vx[i]
-  const v   = vy[i]
-  return {
-    char:       flowChar(d, u, v),
-    color:      densityColor(d, u, v),
-    fontWeight: speedWeight(u, v),
-  }
-}
+// ── main ──────────────────────────────────────────────────────────────────────
 
-// document.querySelector is safe here: ES module <script> tags are always
-// deferred — the DOM is fully parsed before this executes.
-export const settings = {
-  fps: 30,
-  element: document.querySelector('#abc'),
+void main() {
+  // Flip Y so row 0 is at the top (terminal convention)
+  vec2 fc = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
+
+  // Which grid cell does this fragment belong to?
+  vec2 cell = floor(fc / u_cellSize);
+
+  // Fragments outside the character grid → black
+  if (cell.x >= u_gridSize.x || cell.y >= u_gridSize.y) {
+    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+
+  // Normalize cell position to centered [-1, 1] space
+  float m  = min(u_gridSize.x, u_gridSize.y);
+  vec2  uv = 2.0 * (cell - u_gridSize * 0.5) / m;
+
+  // Procedural value
+  float t     = u_time * 0.0006;
+  float value = procValue(uv, t);          // [-1, 1]
+  float d     = (value + 1.0) * 0.5;       // [ 0, 1]
+
+  // Map value → character index in the atlas
+  float charIdx = clamp(floor(d * u_charCount), 0.0, u_charCount - 1.0);
+
+  // Local UV within this cell → sample the font atlas
+  vec2 localUV = fract(fc / u_cellSize);
+  vec2 atlasUV = vec2((charIdx + localUV.x) / u_charCount, localUV.y);
+  float alpha  = texture2D(u_atlas, atlasUV).a;
+
+  // Color: cool blue (210°) base, ±45° shifted by wave interference
+  float hue       = mod(210.0 + value * 45.0, 360.0) / 360.0;
+  float lightness = d * 0.6;
+  vec3  rgb       = hsl2rgb(hue, 0.55, lightness);
+
+  // Character pixels are colored; background is black
+  gl_FragColor = vec4(rgb * alpha, 1.0);
 }
+`
