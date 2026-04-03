@@ -13,6 +13,9 @@ import {
 
 export const config = { fontSize, fontFamily, chars }
 
+// Emit GLSL float literals — ensures e.g. 3 becomes "3.0" not "3"
+const g = (v) => Number(v).toFixed(4)
+
 // ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
 
 export const vertexSource = /* glsl */ `
@@ -139,8 +142,8 @@ void main() {
   float fSpeed   = fluid.a;                       // [0, 1]
 
   // ── Procedural background (gentle ambient motion) ──
-  float t     = u_time * ${fieldTimeScale} + u_seed;
-  float bgVal = procValue(uv, t) * ${fieldAmplitude};          // bold ambient backdrop
+  float t     = u_time * ${g(fieldTimeScale)} + u_seed;
+  float bgVal = procValue(uv, t) * ${g(fieldAmplitude)};          // bold ambient backdrop
 
   // ── Warp UV by fluid velocity for organic distortion ──
   uv += vec2(fVx, fVy) * 0.4;
@@ -166,15 +169,15 @@ void main() {
     vec2 pixCenter = (cell + 0.5) * u_cellSize - u_resolution * 0.5;
 
     // Breathing zoom — oscillates word size
-    float breathe = ${wordBreathMin} + cos(t * ${wordBreathSpeed}) * ${(wordBreathMax - wordBreathMin).toFixed(2)};
+    float breathe = ${g(wordBreathMin)} + cos(t * ${g(wordBreathSpeed)}) * ${g(wordBreathMax - wordBreathMin)};
 
     // Map to texture UV: at scale=1 one texture pixel = one screen pixel
-    vec2 texSize = vec2(${wordCanvas.width}.0, ${wordCanvas.height}.0);
+    vec2 texSize = vec2(${g(wordCanvas.width)}, ${g(wordCanvas.height)});
     vec2 wuv = pixCenter / (texSize * breathe) + 0.5;
 
     // Noise warp — displace UV for organic letter shapes
-    float wx = sin(wuv.y * 3.1 + t * 0.7) * ${wordWarpX};
-    float wy = cos(wuv.x * 2.7 + t * 0.9) * ${wordWarpY};
+    float wx = sin(wuv.y * 3.1 + t * 0.7) * ${g(wordWarpX)};
+    float wy = cos(wuv.x * 2.7 + t * 0.9) * ${g(wordWarpY)};
     wuv += vec2(wx, wy);
 
     // Only sample inside texture bounds; outside → 0
@@ -187,7 +190,7 @@ void main() {
     vec2 texel = 1.0 / texSize;
     for (float gx = -2.0; gx <= 2.0; gx += 1.0) {
       for (float gy = -2.0; gy <= 2.0; gy += 1.0) {
-        vec2 off = vec2(gx, gy) * texel * ${wordGlowRadius};
+        vec2 off = vec2(gx, gy) * texel * ${g(wordGlowRadius)};
         vec2 guv = wuv + off;
         float gBounds = step(0.0, guv.x) * step(guv.x, 1.0)
                       * step(0.0, guv.y) * step(guv.y, 1.0);
@@ -197,9 +200,9 @@ void main() {
     glow /= 25.0;  // average of 5×5 samples
 
     // Subtle: letters are gentle density ripples inside the fluid
-    value += wordSample * ${wordBoost};
+    value += wordSample * ${g(wordBoost)};
     // Trailing glow — even softer, lingers around letter shapes
-    value += glow * ${wordGlow};
+    value += glow * ${g(wordGlow)};
   }
 
   value = clamp(value, -1.0, 1.0);
