@@ -9,6 +9,8 @@ const FORCE     = 80       // velocity impulse magnitude on mouse move
 const SOURCE    = 12       // density injection amount on mouse move
 const RADIUS    = 3        // injection radius in cells
 const PASSES    = 2        // solver passes per frame
+const AMB_SRC   = 5        // ambient source density per frame
+const AMB_FORCE = 25       // ambient velocity impulse
 
 // ─── simulation state ─────────────────────────────────────────────────────────
 let cols, rows
@@ -28,9 +30,44 @@ export function boot(context) {
   vyPrev      = new Float32Array(N)
   p   = new Float32Array(N)
   div = new Float32Array(N)
+
+  // Seed with a curl-noise pattern so there's immediate motion on load
+  for (let j = 1; j < rows - 1; j++) {
+    for (let i = 1; i < cols - 1; i++) {
+      const idx = j * cols + i
+      const nx = (i / cols) * Math.PI * 6
+      const ny = (j / rows) * Math.PI * 6
+      vx[idx] = Math.sin(ny) * Math.cos(nx * 0.5) * 0.4
+      vy[idx] = -Math.sin(nx) * Math.cos(ny * 0.5) * 0.4
+      density[idx] = Math.max(0, Math.sin(nx * 0.8) * Math.cos(ny * 0.8)) * 0.4
+    }
+  }
 }
 
 export function pre(context, cursor) {
+  // ambient drifting sources — 3 lissajous-like orbits at different frequencies
+  const t = context.time
+  const ambSources = [
+    { x: cols * (0.5 + 0.38 * Math.sin(t * 0.13)),       y: rows * (0.5 + 0.38 * Math.cos(t * 0.11)),       a: t * 0.41 },
+    { x: cols * (0.5 + 0.38 * Math.cos(t * 0.17 + 2.1)), y: rows * (0.5 + 0.38 * Math.sin(t * 0.19 + 2.1)), a: t * 0.37 + 2.1 },
+    { x: cols * (0.5 + 0.20 * Math.sin(t * 0.29 + 4.2)), y: rows * (0.5 + 0.20 * Math.cos(t * 0.23 + 4.2)), a: t * 0.53 + 4.2 },
+  ]
+  for (const src of ambSources) {
+    const si = Math.round(src.x), sj = Math.round(src.y)
+    if (si < 1 || si >= cols - 1 || sj < 1 || sj >= rows - 1) continue
+    for (let dj = -RADIUS; dj <= RADIUS; dj++) {
+      for (let di = -RADIUS; di <= RADIUS; di++) {
+        if (di * di + dj * dj > RADIUS * RADIUS) continue
+        const ci = si + di, cj = sj + dj
+        if (ci < 1 || ci >= cols - 1 || cj < 1 || cj >= rows - 1) continue
+        const idx = cj * cols + ci
+        densityPrev[idx] += AMB_SRC
+        vxPrev[idx]      += Math.cos(src.a) * AMB_FORCE
+        vyPrev[idx]      += Math.sin(src.a) * AMB_FORCE
+      }
+    }
+  }
+
   // inject fluid at cursor position
   const cx = Math.round(cursor.x)
   const cy = Math.round(cursor.y)
