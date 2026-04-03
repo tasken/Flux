@@ -1,8 +1,8 @@
 // Maps fluid simulation state to ABC character properties.
 // All functions are pure — no side effects.
 
-// 8-directional flow characters mapped by velocity angle
-const DIR_CHARS = ['-', '\\', '|', '/', '-', '\\', '|', '/']
+// 8 unique directional arrows — each direction is visually distinct
+const DIR_CHARS = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗']
 
 /**
  * Return a character representing the flow direction.
@@ -12,7 +12,8 @@ const DIR_CHARS = ['-', '\\', '|', '/', '-', '\\', '|', '/']
  */
 export function flowChar(vx, vy) {
   const speed = Math.hypot(vx, vy)
-  if (speed < 0.001) return '·'
+  if (speed < 0.001) return ' '
+  if (speed < 0.04)  return '·'
   const angle = Math.atan2(vy, vx)
   const sector = Math.round((angle / Math.PI) * 4)
   return DIR_CHARS[((sector % 8) + 8) % 8]
@@ -29,9 +30,10 @@ export function flowChar(vx, vy) {
  */
 export function densityColor(density, vx, vy) {
   const vorticity = vy - vx
-  const hue = ((Math.round(200 + vorticity * 80) % 360) + 360) % 360
-  const lightness = Math.round(Math.min(density, 1) * 60)
-  return `hsl(${hue}, 80%, ${lightness}%)`
+  const hue = ((Math.round(200 + vorticity * 120) % 360) + 360) % 360
+  const sat = Math.round(60 + Math.min(density, 1) * 40)
+  const lightness = Math.round(Math.min(density, 1) * 80)
+  return `hsl(${hue}, ${sat}%, ${lightness}%)`
 }
 
 /**

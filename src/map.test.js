@@ -2,20 +2,23 @@ import { describe, it, expect } from 'vitest'
 import { flowChar, densityColor, speedWeight } from './map.js'
 
 describe('flowChar', () => {
-  it('returns · for zero velocity', () => {
-    expect(flowChar(0, 0)).toBe('·')
+  it('returns space for zero velocity', () => {
+    expect(flowChar(0, 0)).toBe(' ')
   })
-  it('returns - for rightward flow', () => {
-    expect(flowChar(1, 0)).toBe('-')
+  it('returns · for near-zero velocity', () => {
+    expect(flowChar(0.02, 0)).toBe('·')
   })
-  it('returns | for downward flow', () => {
-    expect(flowChar(0, 1)).toBe('|')
+  it('returns → for rightward flow', () => {
+    expect(flowChar(1, 0)).toBe('→')
   })
-  it('returns / for up-right diagonal', () => {
-    expect(flowChar(1, -1)).toBe('/')
+  it('returns ↓ for downward flow', () => {
+    expect(flowChar(0, 1)).toBe('↓')
   })
-  it('returns \\ for down-right diagonal', () => {
-    expect(flowChar(1, 1)).toBe('\\')
+  it('returns ↗ for up-right diagonal', () => {
+    expect(flowChar(1, -1)).toBe('↗')
+  })
+  it('returns ↘ for down-right diagonal', () => {
+    expect(flowChar(1, 1)).toBe('↘')
   })
 })
 
@@ -24,9 +27,9 @@ describe('densityColor', () => {
     const c = densityColor(0.5, 0.3, -0.2)
     expect(c).toMatch(/^hsl\(/)
   })
-  it('returns black for zero density', () => {
+  it('returns zero lightness for zero density', () => {
     const c = densityColor(0, 0, 0)
-    expect(c).toMatch(/hsl\(\d+, 80%, 0%\)/)
+    expect(c).toMatch(/hsl\(\d+, \d+%, 0%\)/)
   })
 })
 
