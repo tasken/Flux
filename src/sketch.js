@@ -126,7 +126,7 @@ export function main({ x, y }, { cols }) {
   const u   = vx[i]
   const v   = vy[i]
   return {
-    char:       flowChar(u, v),
+    char:       flowChar(d, u, v),
     color:      densityColor(d, u, v),
     fontWeight: speedWeight(u, v),
   }
