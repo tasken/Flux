@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --host 192.168.1.3 --port 58707",
+    "preview": "vite preview --host",
     "check": "npm run test && npm run build",
     "test": "vitest run --config vitest.config.js"
   },

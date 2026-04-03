@@ -1,13 +1,13 @@
 # webart — Design Spec
 
-**Date:** 2026-04-02  
+**Date:** 2026-04-03  
 **Status:** Current
 
 ---
 
 ## Overview
 
-A personal creative playground for generative, interactive text-mode art rendered as a character grid. The live app is a small WebGL renderer: a fragment shader generates the motion field, a font atlas turns the field into glyphs, and pointer input perturbs the field in real time. The user edits a single sketch file locally; the browser reloads instantly via Vite HMR.
+A personal creative playground for generative, interactive text-mode art rendered as a character grid. The live app is a hybrid CPU+GPU renderer: a CPU-side Navier-Stokes fluid simulation feeds density and velocity data into a WebGL fragment shader, which generates the motion field, samples a font atlas to render glyphs, and applies OKLch perceptual color. Pointer input injects forces into the fluid sim and adds instant visual glow in the shader. A secondary "words" mode overlays split-flap animated text through the same warped field. The user edits a single sketch file locally; the browser reloads instantly via Vite HMR.
 
 ---
 
@@ -15,117 +15,156 @@ A personal creative playground for generative, interactive text-mode art rendere
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Runtime | WebGL + Canvas font atlas | GPU-friendly character grid rendering with minimal runtime code |
+| Runtime | WebGL + Canvas font atlas + CPU fluid sim | GPU character-grid rendering with real fluid dynamics |
+| Color | OKLch (Björn Ottosson, 2020) | Perceptually uniform: equal L steps look equally bright regardless of hue |
 | Dev server | Vite | Instant HMR — sketch file changes reflect without page reload |
-| Language | Vanilla JS (ES modules) | No framework overhead; ABC is module-native |
+| Language | Vanilla JS (ES modules) | No framework overhead; browser-native modules |
+| Deploy | GitHub Pages via GitHub Actions | Automatic deploy on push to main |
 
 ---
 
 ## Project Structure
 
 ```
-~/webArt/
-├── index.html           ← fullscreen canvas, imports main.js
+webArt/
+├── index.html              ← fullscreen canvas, imports main.js
 ├── src/
-│   ├── main.js          ← entry: pointer state, animation loop, lifecycle cleanup
-│   ├── renderer.js      ← WebGL program setup, font atlas, resize/draw/dispose
-│   ├── sketch.js        ← shader sources and high-level visual config
-│   ├── fluid.js         ← experimental Navier-Stokes solver (not wired into runtime)
-│   ├── map.js           ← experimental visual mapping helpers (not wired into runtime)
-│   ├── fluid.test.js    ← solver unit tests
-│   └── map.test.js      ← visual mapping unit tests
+│   ├── main.js             ← entry: boot, pointer state, animation loop, mode switching
+│   ├── renderer.js         ← WebGL program, font atlas, fluid/word textures, resize/draw/dispose
+│   ├── sketch.js           ← GLSL shader sources, visual config, OKLch color
+│   ├── simulation.js       ← wraps CPU solver into frame-steppable sim with RGBA packing
+│   ├── words.js            ← split-flap word cycler (departure-board animation)
+│   ├── sketch.test.js      ← sketch config + shader contract tests
+│   ├── renderer.test.js    ← renderer module contract tests
+│   └── cpu-solver/
+│       ├── fluid.js        ← pure Navier-Stokes solver (addSource, diffuse, advect, project)
+│       ├── fluid.test.js   ← solver unit tests
+│       ├── map.js          ← visual mapping helpers (reference code, not used at runtime)
+│       ├── map.test.js     ← mapping unit tests
+│       └── README.md       ← module documentation
 ├── docs/
-│   └── design.md        ← this file
-├── vite.config.js       ← dev server config (host, port, optimizeDeps)
-└── package.json         ← deps: vite (dev); vitest (test)
+│   ├── design.md           ← this file
+│   └── future.md           ← future improvements roadmap
+├── .github/
+│   ├── workflows/deploy.yml← GitHub Pages deploy workflow
+│   └── instructions/       ← Copilot instruction files
+├── vite.config.js          ← dev server config (host: true)
+├── vitest.config.js        ← test config (node environment)
+└── package.json            ← deps: vite (dev), vitest (test)
 ```
 
 ---
 
 ## Architecture
 
-The app is split into three runtime pieces:
+The app is split into five runtime modules:
 
 ### `main.js`
-Creates the renderer after fonts load, manages the animation loop, tracks pointer position and velocity, and handles cleanup during hot-module replacement.
+Entry point. Loads fonts, creates the renderer and word cycler, manages the animation loop, tracks pointer position and velocity, injects forces into the fluid simulation, and handles cleanup during hot-module replacement. Supports keyboard mode switching between procedural (key 1) and words (key 2) modes.
 
 ### `renderer.js`
-Compiles the shader program, builds a single-row glyph atlas from the configured character ramp, keeps the canvas sized to device pixels, and pushes runtime uniforms into WebGL on each frame.
+Compiles the shader program, builds a single-row glyph atlas (measuring max width across all characters), manages three GPU textures (font atlas on unit 0, fluid data on unit 1, word bitmap on unit 2), keeps the canvas sized to device pixels, and pushes runtime uniforms into WebGL on each frame. Exposes `recompile()` for shader-only HMR, `uploadFluid()` for CPU→GPU fluid transfer, `uploadWordTexture()` for word bitmap upload, and `setMode()` for switching render modes. A random `u_seed` uniform is set once per session so each page load looks different.
 
 ### `sketch.js`
-Contains the editable art logic: the vertex shader, the fragment shader, and the high-level character/font configuration. The fragment shader generates the animated value field, converts it to a glyph lookup, and shades the final result.
+Contains the editable art logic: the vertex shader, the fragment shader, and the character/font configuration. The fragment shader generates the animated value field using domain warping with irrational frequency ratios (φ, √2), samples the CPU fluid texture for organic distortion, converts values to glyph lookups, and shades with OKLch perceptual color. In words mode, it samples the word bitmap through the same warped UV space.
 
-The runtime flow is:
+### `simulation.js`
+Wraps the CPU Navier-Stokes solver into a frame-steppable simulation. Maintains density and velocity fields as Float32Arrays, exposes `injectForce()` for pointer interaction, `step()` for advancing the simulation, and packs results into an RGBA Uint8Array (`pixels`) for GPU texture upload.
+
+### `words.js`
+Split-flap word cycler that animates through a curated word list. Renders white text on a small off-screen canvas, with characters cycling through the alphabet toward their target — staggered per position like an airport departure board. Returns the canvas for GPU texture upload each frame.
+
+### Runtime Flow
 
 1. `document.fonts.ready` resolves in `main.js`
-2. `createRenderer()` builds the WebGL program and glyph atlas
-3. Pointer events update normalized cursor position plus motion delta
-4. `draw()` sends time, grid size, pointer state, and atlas metadata to the shader
-5. The fragment shader turns each cell into a character sample and final color
+2. `createRenderer()` builds the WebGL program, glyph atlas, and fluid/word textures
+3. `createWordCycler()` prepares the split-flap animation canvas
+4. On resize, `renderer.resize()` returns `{ cols, rows }` for simulation sizing
+5. Each frame:
+   - Pointer forces are injected into the fluid sim via `sim.injectForce()`
+   - `sim.step()` advances the Navier-Stokes solver
+   - `renderer.uploadFluid()` sends packed RGBA pixels to the GPU
+   - In words mode, `wordCycler.update()` advances the flap animation
+   - `renderer.draw()` sends time, pointer state, and uniforms to the shader
+   - The fragment shader samples the fluid texture, warps coordinates, picks characters, and applies OKLch color
 
 ---
 
 ## Shader Behavior
 
-The fragment shader uses a stateless procedural field rather than a persistent simulation buffer:
+The fragment shader combines stateless procedural animation with live fluid simulation data:
 
-1. **Domain warping** distorts coordinates through multiple sin/cos passes
-2. **Wave interference** blends horizontal, vertical, diagonal, and radial components
-3. **Pointer influence** bends coordinates using cursor motion and adds a glow/burst term near the pointer
-4. **Glyph lookup** converts the final scalar value into an index within the atlas texture
-5. **Shading** maps the value to hue, saturation, and lightness before masking through the glyph alpha
+1. **Fluid sampling** reads density, velocity, and speed from the CPU simulation texture
+2. **Procedural background** uses domain warping (3 passes) and wave interference (5 layers) with irrational frequency ratios (φ, √2) to produce non-repeating ambient motion
+3. **UV warping** displaces coordinates by fluid velocity for organic distortion
+4. **Pointer influence** adds glow/burst terms near the cursor for instant visual feedback
+5. **Words mode** samples a word bitmap texture through the warped UV space
+6. **Glyph lookup** converts the combined scalar value into a character index in the atlas
+7. **OKLch color** maps vorticity, speed, and density to a cold palette (blue→cyan→purple, ~3.4–5.2 rad) that shifts warm (orange/red) on click
 
-This keeps the piece lightweight and responsive while still feeling fluid-like.
+The `u_seed` uniform offsets time by a random amount per session, ensuring each page load starts with a different visual state.
+
+---
 
 ## Character Rendering
 
 The configured character ramp is:
 
 ```text
- ·.-~:+ca01OX#@
+ .·:;-=+*abcXYZ#@W
 ```
 
-The renderer measures the active font, creates a one-row atlas canvas, uploads that canvas as a texture, and samples it in the fragment shader using per-cell UVs.
+The renderer measures the maximum glyph width across all characters, creates a one-row atlas canvas, uploads it as a texture, and samples it in the fragment shader using per-cell UVs. Different fonts or ramps change the entire feel of the piece.
 
-This means:
+---
 
-- the art remains editable as text characters instead of bitmap sprites
-- different fonts or ramps can change the entire feel of the piece
-- the GPU still does the heavy lifting once the atlas exists
+## Color System
+
+Colors use the OKLch perceptual color space (Björn Ottosson's OKLab, 2020). The pipeline:
+
+1. Vorticity (fVy − fVx), background value, and pointer interaction drive a hue base
+2. Cold palette clamps hue to ~3.4–5.2 rad (blue/cyan/purple)
+3. Click burst blends toward a warm hue (~0.6 rad, orange/red) for tactile feedback
+4. Chroma is driven by background amplitude, fluid speed, and pointer proximity
+5. Luminance tracks the combined density/procedural value, capped at 0.95
 
 ---
 
 ## Interaction
 
-- **Pointer move** — updates a normalized cursor position and motion vector
-- **Pointer down** — increases the intensity of the local burst around the cursor
-- **Pointer leave / idle** — fades interaction back out so the field returns to ambient motion
+- **Pointer move** — injects directional forces into the fluid sim + adds shader glow
+- **Pointer down** — amplifies force injection and triggers warm color burst
+- **Pointer leave / idle** — forces decay; fluid drains via per-frame velocity/density decay
+- **Key 1** — procedural mode (default)
+- **Key 2** — words mode (split-flap animated text)
 
 ---
 
 ## Dev Workflow
 
 ```bash
-cd ~/webArt
 npm install
-npm run dev        # Vite starts, opens browser
-# edit src/sketch.js → browser reflects changes instantly (no page reload)
+npm run dev        # Vite starts with HMR
+# edit src/sketch.js → shader recompiles instantly (no page reload)
+npm test           # run vitest suite
+npm run build      # production bundle
 ```
 
-The `import.meta.hot.dispose()` cleanup in `main.js` removes listeners, cancels the animation frame, and tears down GPU resources before the next module instance takes over.
+The `import.meta.hot.dispose()` cleanup in `main.js` removes listeners, cancels the animation frame, and tears down GPU resources before the next module instance takes over. Shader-only edits trigger `recompile()` instead of a full page reload.
 
 ---
 
-## Experimental Modules
+## Deployment
 
-`src/fluid.js` and `src/map.js` are retained as tested experiments from an earlier fluid-solver direction. They are not wired into the current WebGL runtime, but they remain useful reference code if the project returns to a persistent simulation approach later.
+GitHub Pages deployment is automated via `.github/workflows/deploy.yml`. On push to `main`, the workflow installs dependencies, builds with `--base=/webArt/`, and deploys the dist folder.
 
 ---
 
 ## Out of Scope (Current)
 
 - Multiple sketches / gallery
-- Full simulation-state persistence on the GPU
+- Full simulation-state persistence on the GPU (see `docs/future.md`)
 - Per-character size, rotation, opacity
 - Saving/sharing sketches
-- Advanced mobile-specific interaction design
+- Mobile-specific interaction design
+- Parameter UI / dat.gui

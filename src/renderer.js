@@ -16,6 +16,8 @@ const UNIFORM_NAMES = [
   'u_pointerDown',
   'u_fluid',
   'u_seed',
+  'u_mode',
+  'u_wordTex',
 ]
 
 // ── shader compilation ────────────────────────────────────────────────────────
@@ -153,8 +155,24 @@ export function createRenderer(canvas, opts) {
     gl.uniform1i(u.u_fluid, 1)
   }
 
+  // Word bitmap texture (RGBA, rendered by words.js split-flap cycler)
+  let wordTex = gl.createTexture()
+  gl.bindTexture(gl.TEXTURE_2D, wordTex)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+  function bindWord() {
+    gl.useProgram(program)
+    gl.activeTexture(gl.TEXTURE2)
+    gl.bindTexture(gl.TEXTURE_2D, wordTex)
+    gl.uniform1i(u.u_wordTex, 2)
+  }
+
   bindAtlas()
   bindFluid()
+  bindWord()
 
   // Random seed set once per session — offsets time so each load looks different
   const seed = Math.random() * 1e5
@@ -208,6 +226,11 @@ export function createRenderer(canvas, opts) {
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     },
 
+    setMode(mode) {
+      gl.useProgram(program)
+      gl.uniform1f(u.u_mode, mode)
+    },
+
     recompile(newVertexSource, newFragmentSource) {
       const newProgram = link(
         gl,
@@ -220,6 +243,7 @@ export function createRenderer(canvas, opts) {
       Object.assign(u, getUniforms(gl, program, UNIFORM_NAMES))
       bindAtlas()
       bindFluid()
+      bindWord()
       gl.useProgram(program)
       gl.uniform1f(u.u_seed, seed)
       this.resize()
@@ -231,9 +255,16 @@ export function createRenderer(canvas, opts) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
     },
 
+    uploadWordTexture(canvas) {
+      gl.activeTexture(gl.TEXTURE2)
+      gl.bindTexture(gl.TEXTURE_2D, wordTex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+    },
+
     dispose() {
       gl.deleteTexture(atlas.tex)
       gl.deleteTexture(fluidTex)
+      gl.deleteTexture(wordTex)
       gl.deleteBuffer(buf)
       gl.deleteProgram(program)
     },
