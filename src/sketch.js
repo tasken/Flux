@@ -155,15 +155,15 @@ void main() {
   value += dot(pointerFlow, uv - pointerUV) * pointerGlow * 0.6;
 
   // ── Word emergence: noise-warped bitmap sampling ──
-  // Words rise from the procedural field and dissolve back.
-  // Gentle domain warp on the texture UV makes letters breathe.
+  // Words live inside the liquid as subtle density variations.
+  // A soft glow halo trails behind the breathing warp.
   {
     // Map cell to word texture UV space (centered)
     vec2 wordCell = (cell + 0.5) / u_gridSize;   // [0,1] grid space
     vec2 wuv = wordCell - 0.5;                    // center at 0
 
-    // Breathing zoom — slow oscillation in word scale
-    float breathe = 1.2 + cos(t * 1.6) * 0.35;
+    // Breathing zoom — larger display area, slow drift
+    float breathe = 0.7 + cos(t * 1.1) * 0.15;
     wuv *= breathe;
 
     // Noise warp — displace UV for organic letter shapes
@@ -178,8 +178,24 @@ void main() {
                    * step(0.0, wuv.y) * step(wuv.y, 1.0);
     float wordSample = texture2D(u_wordTex, wuv).r * inBounds;
 
-    // Modulate: word bitmap *boosts* the existing field value
-    value += wordSample * 0.7;
+    // Soft glow: sample neighbours with slight offset for a halo
+    float glow = 0.0;
+    vec2 texel = 1.0 / vec2(512.0, 128.0);  // word canvas texel size
+    for (float gx = -2.0; gx <= 2.0; gx += 1.0) {
+      for (float gy = -2.0; gy <= 2.0; gy += 1.0) {
+        vec2 off = vec2(gx, gy) * texel * 1.5;
+        vec2 guv = wuv + off;
+        float gBounds = step(0.0, guv.x) * step(guv.x, 1.0)
+                      * step(0.0, guv.y) * step(guv.y, 1.0);
+        glow += texture2D(u_wordTex, guv).r * gBounds;
+      }
+    }
+    glow /= 25.0;  // average of 5×5 samples
+
+    // Subtle: letters are gentle density ripples inside the fluid
+    value += wordSample * 0.22;
+    // Trailing glow — even softer, lingers around letter shapes
+    value += glow * 0.12;
   }
 
   value = clamp(value, -1.0, 1.0);

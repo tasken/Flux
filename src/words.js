@@ -1,16 +1,41 @@
 // Word emergence — split-flap cycler whose bitmap is sampled by the GPU shader
 // with noise-warped UVs so words rise from and dissolve into the procedural field.
+//
+// LINES is a sequential script — each entry appears in order, then loops.
+// Replace with song lyrics, poetry, or any text sequence.
 
-const WORDS = [
-  'VOID',    'ABYSS',   'ORIGIN',  'SPARK',   'SILENCE', 'NOTHING',
-  'SYSTEM',  'NETWORK', 'SYNAPSE', 'CIRCUIT', 'MEMORY',  'ENGINE',
-  'NEBULA',  'ECLIPSE', 'HORIZON', 'GRAVITY', 'ORBIT',   'ZENITH',
-  'BREATHE', 'PULSE',   'FLESH',   'MARROW',  'VISION',  'SPIRIT',
-  'DECAY',   'ENTROPY', 'FRACTURE','SHADOW',  'WINTER',  'RUIN',
-  'AWAKEN',  'EVOLVE',  'BECOME',  'TRANSCEND','BEYOND', 'INFINITE',
+const LINES = [
+  'VOID',
+  'ABYSS',
+  'ORIGIN',
+  'SPARK',
+  'SILENCE',
+  'NOTHING',
+  'SYSTEM',
+  'NETWORK',
+  'SYNAPSE',
+  'CIRCUIT',
+  'MEMORY',
+  'ENGINE',
+  'NEBULA',
+  'ECLIPSE',
+  'HORIZON',
+  'GRAVITY',
+  'ORBIT',
+  'ZENITH',
+  'BREATHE',
+  'PULSE',
+  'DECAY',
+  'ENTROPY',
+  'FRACTURE',
+  'SHADOW',
+  'AWAKEN',
+  'EVOLVE',
+  'BECOME',
+  'INFINITE',
 ]
 
-const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?\'"0123456789-'
 
 export function createWordCycler(fontFamily) {
   let wordIndex  = 0
@@ -21,14 +46,14 @@ export function createWordCycler(fontFamily) {
   const target  = []   // target alphabet index per letter
   const delay   = []   // staggered start delay per letter
 
-  // Small canvas — bilinear GPU sampling turns it into smooth gradients
+  // Larger canvas — bilinear GPU sampling turns it into smooth gradients
   const canvas = document.createElement('canvas')
-  canvas.width  = 256
-  canvas.height = 64
+  canvas.width  = 512
+  canvas.height = 128
   const ctx = canvas.getContext('2d')
 
   function pickNextWord() {
-    const word = WORDS[wordIndex % WORDS.length]
+    const word = LINES[wordIndex % LINES.length].toUpperCase()
     wordIndex++
 
     while (current.length < word.length) current.push(0)
@@ -63,7 +88,7 @@ export function createWordCycler(fontFamily) {
     const { width, height } = canvas
     ctx.clearRect(0, 0, width, height)
     const word = current.map(i => ALPHABET[i]).join('')
-    ctx.font = `bold 36px ${fontFamily}`
+    ctx.font = `bold 64px ${fontFamily}`
     ctx.textAlign    = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillStyle    = '#fff'
