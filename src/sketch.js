@@ -150,8 +150,8 @@ void main() {
   float pointerDist = distance(uv, pointerUV);
   float pointerGlow = u_pointerActive * smoothstep(0.42, 0.0, pointerDist);
   float pointerBurst = u_pointerDown * smoothstep(0.22, 0.0, pointerDist);
-  uv += pointerFlow * pointerGlow * 0.6;
   value += pointerGlow * 0.2 + pointerBurst * 0.3;
+  value += dot(pointerFlow, uv - pointerUV) * pointerGlow * 0.6;
 
   value = clamp(value, -1.0, 1.0);
   float d = (value + 1.0) * 0.5;                  // [0, 1]
