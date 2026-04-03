@@ -7,7 +7,7 @@
 
 ## Overview
 
-A personal creative playground for generative, interactive fluid art rendered as a character grid. The user edits a single sketch file locally; the browser reloads instantly via Vite HMR. Inspired by [play.ertdfgcvb.xyz](https://play.ertdfgcvb.xyz), which is built on the ABC library.
+A personal creative playground for generative, interactive text-mode art rendered as a character grid. The live app is a small WebGL renderer: a fragment shader generates the motion field, a font atlas turns the field into glyphs, and pointer input perturbs the field in real time. The user edits a single sketch file locally; the browser reloads instantly via Vite HMR.
 
 ---
 
@@ -15,7 +15,7 @@ A personal creative playground for generative, interactive fluid art rendered as
 
 | Layer | Choice | Reason |
 |---|---|---|
-| Runtime | [ABC library](https://play.ertdfgcvb.xyz) | Same lib as ertdfgcvb; provides char grid loop, lifecycle hooks, DOM renderer |
+| Runtime | WebGL + Canvas font atlas | GPU-friendly character grid rendering with minimal runtime code |
 | Dev server | Vite | Instant HMR — sketch file changes reflect without page reload |
 | Language | Vanilla JS (ES modules) | No framework overhead; ABC is module-native |
 
@@ -25,16 +25,15 @@ A personal creative playground for generative, interactive fluid art rendered as
 
 ```
 ~/webArt/
-├── index.html           ← fullscreen pre#abc, imports main.js
+├── index.html           ← fullscreen canvas, imports main.js
 ├── src/
-│   ├── main.js          ← entry: run(sketch)
-│   ├── sketch.js        ← ABC lifecycle hooks + fluid state + curl-noise injection
-│   ├── fluid.js         ← pure Navier-Stokes solver (addSource, diffuse, advect, project)
-│   ├── map.js           ← pure visual mapping (flowChar, densityColor, speedWeight)
+│   ├── main.js          ← entry: pointer state, animation loop, lifecycle cleanup
+│   ├── renderer.js      ← WebGL program setup, font atlas, resize/draw/dispose
+│   ├── sketch.js        ← shader sources and high-level visual config
+│   ├── fluid.js         ← experimental Navier-Stokes solver (not wired into runtime)
+│   ├── map.js           ← experimental visual mapping helpers (not wired into runtime)
 │   ├── fluid.test.js    ← solver unit tests
 │   └── map.test.js      ← visual mapping unit tests
-├── vendor/
-│   └── play.core/       ← vendored ABC library (gitignored)
 ├── docs/
 │   └── design.md        ← this file
 ├── vite.config.js       ← dev server config (host, port, optimizeDeps)
@@ -45,71 +44,62 @@ A personal creative playground for generative, interactive fluid art rendered as
 
 ## Architecture
 
-ABC provides the character grid loop. The sketch exports four lifecycle hooks:
+The app is split into three runtime pieces:
 
-### `boot({ cols, rows })`
-Runs once before the first frame. Allocates eight `Float32Array(cols × rows)` buffers:
-`density`, `densityPrev`, `vx`, `vy`, `vxPrev`, `vyPrev`, `p` (pressure scratch), `div` (divergence scratch).
+### `main.js`
+Creates the renderer after fonts load, manages the animation loop, tracks pointer position and velocity, and handles cleanup during hot-module replacement.
 
-Seeds the field with a curl-noise pattern (sin/cos of normalised grid coords) so there is visible motion from frame one.
+### `renderer.js`
+Compiles the shader program, builds a single-row glyph atlas from the configured character ramp, keeps the canvas sized to device pixels, and pushes runtime uniforms into WebGL on each frame.
 
-### `pre(context, cursor)`
-Runs once per frame before `main()`. Steps in order:
+### `sketch.js`
+Contains the editable art logic: the vertex shader, the fragment shader, and the high-level character/font configuration. The fragment shader generates the animated value field, converts it to a glyph lookup, and shades the final result.
 
-1. **Curl-noise injection** — every `CURL_STEP=6` cells, approximate the curl of an fBm potential field via finite differences (`vx = ∂ψ/∂y`, `vy = -∂ψ/∂x`). Divergence-free by construction: no net drift accumulates over time.
-2. **Cursor injection** — density burst + velocity impulse in a radius-3 disc at cursor position; 3× stronger on mouse-down.
-3. **Solver** — runs `PASSES=2` full Navier-Stokes passes (velocity step + density step each pass).
-4. **Decay** — `vxPrev/vyPrev/densityPrev *= 0.8` (source buffer drain); `density *= 0.997` (long-term saturation guard); `vx/vy *= 0.988` (linear drag — keeps speed bounded, prevents all-arrow lock-in).
+The runtime flow is:
 
-### `main(coord, context)`
-Runs once per cell per frame. Returns a styled character from `map.js`:
+1. `document.fonts.ready` resolves in `main.js`
+2. `createRenderer()` builds the WebGL program and glyph atlas
+3. Pointer events update normalized cursor position plus motion delta
+4. `draw()` sends time, grid size, pointer state, and atlas metadata to the shader
+5. The fragment shader turns each cell into a character sample and final color
 
-```js
-return {
-  char:       flowChar(density[i], vx[i], vy[i]),
-  color:      densityColor(density[i], vx[i], vy[i]),
-  fontWeight: speedWeight(vx[i], vy[i]),
-}
+---
+
+## Shader Behavior
+
+The fragment shader uses a stateless procedural field rather than a persistent simulation buffer:
+
+1. **Domain warping** distorts coordinates through multiple sin/cos passes
+2. **Wave interference** blends horizontal, vertical, diagonal, and radial components
+3. **Pointer influence** bends coordinates using cursor motion and adds a glow/burst term near the pointer
+4. **Glyph lookup** converts the final scalar value into an index within the atlas texture
+5. **Shading** maps the value to hue, saturation, and lightness before masking through the glyph alpha
+
+This keeps the piece lightweight and responsive while still feeling fluid-like.
+
+## Character Rendering
+
+The configured character ramp is:
+
+```text
+ ·.-~:+ca01OX#@
 ```
 
-### `post()` (optional)
-Reserved for future overlays (e.g. debug velocity arrows, cursor indicator).
+The renderer measures the active font, creates a one-row atlas canvas, uploads that canvas as a texture, and samples it in the fragment shader using per-cell UVs.
 
----
+This means:
 
-## Fluid Simulation: Navier-Stokes (Jos Stam, 1999)
-
-Based on *Real-Time Fluid Dynamics for Games* (Stam, GDC 1999). Each solver pass runs three steps on both the density and velocity fields:
-
-1. **Diffuse** — spread values to neighbours via Gauss-Seidel relaxation (20 iterations)
-2. **Advect** — move values along the velocity field using bilinear interpolation
-3. **Project** — enforce divergence-free flow (prevents energy blow-up); also uses Gauss-Seidel
-
-Boundary conditions: velocity uses clamped `setBounds` (no-slip at walls); pressure uses averaged `setBounds`. The `project` step does **not** apply `setBounds` to the post-projection velocity (physically correct: enforcing divergence-free is sufficient).
-
-Solver is in `src/fluid.js` — all pure functions, no global state, fully unit-tested.
-
----
-
-## Character Visual Mapping (`src/map.js`)
-
-All three functions are pure (no side effects) and unit-tested.
-
-| Fluid signal | Visual property | Detail |
-|---|---|---|
-| Density | Character (low speed) | 16-char ramp `' ·.-~:+ca01OX#@$'` — sparse → dense |
-| Velocity direction | Character (high speed) | 8-direction arrows `→ ↘ ↓ ↙ ← ↖ ↑ ↗` when `speed > 0.3` |
-| Velocity magnitude | `fontWeight` | `300` (still) / `400` (medium) / `700` (fast) |
-| Density | Lightness | `hsl(h, 55%, density * 60%)` — dark background, bright dense regions |
-| Vorticity `(vy − vx)` | Hue | Base 210° (cool blue) ± 45° — subtle breath of colour, no strobing |
+- the art remains editable as text characters instead of bitmap sprites
+- different fonts or ramps can change the entire feel of the piece
+- the GPU still does the heavy lifting once the atlas exists
 
 ---
 
 ## Interaction
 
-- **Mouse move** — injects a density burst + velocity impulse at cursor position each frame
-- **Mouse down** — increases injection strength (stronger force)
-- Force magnitude and radius are tunable constants at the top of `sketch.js`
+- **Pointer move** — updates a normalized cursor position and motion vector
+- **Pointer down** — increases the intensity of the local burst around the cursor
+- **Pointer leave / idle** — fades interaction back out so the field returns to ambient motion
 
 ---
 
@@ -122,13 +112,20 @@ npm run dev        # Vite starts, opens browser
 # edit src/sketch.js → browser reflects changes instantly (no page reload)
 ```
 
-ABC reruns `boot()` and restarts the animation loop when the module hot-reloads.
+The `import.meta.hot.dispose()` cleanup in `main.js` removes listeners, cancels the animation frame, and tears down GPU resources before the next module instance takes over.
 
 ---
 
-## Out of Scope (v1)
+## Experimental Modules
+
+`src/fluid.js` and `src/map.js` are retained as tested experiments from an earlier fluid-solver direction. They are not wired into the current WebGL runtime, but they remain useful reference code if the project returns to a persistent simulation approach later.
+
+---
+
+## Out of Scope (Current)
 
 - Multiple sketches / gallery
-- Per-character size, rotation, opacity (requires Canvas 2D renderer — deferred)
+- Full simulation-state persistence on the GPU
+- Per-character size, rotation, opacity
 - Saving/sharing sketches
-- Mobile touch support
+- Advanced mobile-specific interaction design
