@@ -158,9 +158,15 @@ void main() {
   // Words live inside the liquid as subtle density variations.
   // A soft glow halo trails behind the breathing warp.
   {
-    // Map cell to word texture UV space (centered)
+    // Map cell to word texture UV space (centered), correcting for both
+    // grid and texture aspect ratios so letters keep their natural shape.
     vec2 wordCell = (cell + 0.5) / u_gridSize;   // [0,1] grid space
     vec2 wuv = wordCell - 0.5;                    // center at 0
+
+    // Fix aspect: grid may not be square, texture is 16:1
+    float gridAspect = u_gridSize.x / u_gridSize.y;   // e.g. 1.7 for widescreen
+    float texAspect  = 1024.0 / 64.0;                 // 16.0
+    wuv.x *= gridAspect / texAspect;                   // squeeze X to match
 
     // Breathing zoom — larger display area, slow drift
     float breathe = 0.7 + cos(t * 1.1) * 0.15;
