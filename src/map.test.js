@@ -2,23 +2,26 @@ import { describe, it, expect } from 'vitest'
 import { flowChar, densityColor, speedWeight } from './map.js'
 
 describe('flowChar', () => {
-  it('returns space for zero velocity', () => {
-    expect(flowChar(0, 0)).toBe(' ')
+  it('returns space for zero density', () => {
+    expect(flowChar(0, 0, 0)).toBe(' ')
   })
-  it('returns · for near-zero velocity', () => {
-    expect(flowChar(0.02, 0)).toBe('·')
+  it('returns a density ramp char for slow fluid', () => {
+    // slow speed, medium density — should pick from DENSITY string, not an arrow
+    const c = flowChar(0.5, 0.05, 0)
+    expect(c).not.toBe('→')
+    expect(c).not.toBe(' ')
   })
-  it('returns → for rightward flow', () => {
-    expect(flowChar(1, 0)).toBe('→')
+  it('returns → for fast rightward flow', () => {
+    expect(flowChar(0.5, 1, 0)).toBe('→')
   })
-  it('returns ↓ for downward flow', () => {
-    expect(flowChar(0, 1)).toBe('↓')
+  it('returns ↓ for fast downward flow', () => {
+    expect(flowChar(0.5, 0, 1)).toBe('↓')
   })
-  it('returns ↗ for up-right diagonal', () => {
-    expect(flowChar(1, -1)).toBe('↗')
+  it('returns ↗ for fast up-right flow', () => {
+    expect(flowChar(0.5, 1, -1)).toBe('↗')
   })
-  it('returns ↘ for down-right diagonal', () => {
-    expect(flowChar(1, 1)).toBe('↘')
+  it('returns ↘ for fast down-right flow', () => {
+    expect(flowChar(0.5, 1, 1)).toBe('↘')
   })
 })
 

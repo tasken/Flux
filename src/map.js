@@ -1,22 +1,35 @@
 // Maps fluid simulation state to ABC character properties.
 // All functions are pure — no side effects.
 
-// 8 unique directional arrows — each direction is visually distinct
+// Density ramp: sparse → dense, ordered by visual ink coverage.
+// Inspired by ertdfgcvb's plasma.js approach: index a string with a
+// normalised float to get a character that matches the visual weight.
+const DENSITY = ' ·.-~:+ca01OX#@$'
+
+// 8 unique directional arrows used at high velocity
 const DIR_CHARS = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗']
 
 /**
- * Return a character representing the flow direction.
+ * Return a character representing the fluid state at this cell.
+ * Low/zero speed: density ramp (visual weight tracks how much fluid is here).
+ * High speed: directional arrow (shows where the fluid is going).
+ * @param {number} density  0–1+
  * @param {number} vx
  * @param {number} vy
  * @returns {string}
  */
-export function flowChar(vx, vy) {
+export function flowChar(density, vx, vy) {
+  const d = Math.min(density * 1.4, 1)
   const speed = Math.hypot(vx, vy)
-  if (speed < 0.001) return ' '
-  if (speed < 0.04)  return '·'
-  const angle = Math.atan2(vy, vx)
-  const sector = Math.round((angle / Math.PI) * 4)
-  return DIR_CHARS[((sector % 8) + 8) % 8]
+  if (d < 0.005) return ' '
+  if (speed > 0.3) {
+    // fast-moving fluid: show direction
+    const angle = Math.atan2(vy, vx)
+    const sector = Math.round((angle / Math.PI) * 4)
+    return DIR_CHARS[((sector % 8) + 8) % 8]
+  }
+  // slow / settling fluid: show density ramp
+  return DENSITY[Math.min(DENSITY.length - 1, Math.floor(d * DENSITY.length))]
 }
 
 /**
