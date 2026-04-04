@@ -1,5 +1,5 @@
 import { createRenderer } from './renderer.js'
-import { vertexSource, fragmentSource, config } from './sketch.js'
+import { vertexSource, fragmentSource, config, staticUniforms } from './sketch.js'
 import { createSimulation } from './simulation.js'
 import { createWordCycler } from './words.js'
 import { pointerForce, pointerForceDown, pointerDensity, pointerDensityDown, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
@@ -43,7 +43,7 @@ async function boot() {
     console.warn(`Font "${fontFamily}" not loaded, proceeding with fallback`)
   }
 
-  const renderer = createRenderer(canvas, { vertexSource, fragmentSource, ...config })
+  const renderer = createRenderer(canvas, { vertexSource, fragmentSource, ...config, staticUniforms })
   const wordCycler = createWordCycler()
 
   let sim = null  // created after first resize when grid dimensions are known
@@ -147,7 +147,7 @@ async function boot() {
     import.meta.hot.accept('./sketch.js', (newSketch) => {
       if (!newSketch) return
       try {
-        renderer.recompile(newSketch.vertexSource, newSketch.fragmentSource)
+        renderer.recompile(newSketch.vertexSource, newSketch.fragmentSource, newSketch.staticUniforms)
       } catch (e) {
         console.error('Shader recompile failed:', e.message)
         showBootError(`Shader error — fix and save again.\n\n${e.message}`)

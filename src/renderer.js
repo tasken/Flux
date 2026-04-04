@@ -17,6 +17,10 @@ const UNIFORM_NAMES = [
   'u_fluid',
   'u_seed',
   'u_wordTex',
+  'u_fieldTimeScale',
+  'u_fieldAmplitude',
+  'u_wordAspect',
+  'u_densityCharCount',
 ]
 
 // ── shader compilation ────────────────────────────────────────────────────────
@@ -115,6 +119,7 @@ function createAtlas(gl, chars, fontSize, fontFamily) {
 
 export function createRenderer(canvas, opts) {
   const { vertexSource, fragmentSource, fontSize, fontFamily, chars } = opts
+  let staticUniforms = opts.staticUniforms || {}
   if (!chars?.length) throw new Error('Renderer requires at least one character')
 
   const gl = canvas.getContext('webgl', { antialias: false, alpha: false })
@@ -136,6 +141,13 @@ export function createRenderer(canvas, opts) {
 
   let aPos = getAttrib(gl, program, 'a_position')
   const u = getUniforms(gl, program, UNIFORM_NAMES)
+
+  function applyStaticUniforms() {
+    gl.useProgram(program)
+    for (const [name, value] of Object.entries(staticUniforms)) {
+      if (u[name] !== undefined) gl.uniform1f(u[name], value)
+    }
+  }
 
   function bindAtlas() {
     gl.useProgram(program)
@@ -183,6 +195,7 @@ export function createRenderer(canvas, opts) {
   const seed = Math.random() * 1e5
   gl.useProgram(program)
   gl.uniform1f(u.u_seed, seed)
+  applyStaticUniforms()
 
   return {
     resize() {
@@ -231,7 +244,7 @@ export function createRenderer(canvas, opts) {
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     },
 
-    recompile(newVertexSource, newFragmentSource) {
+    recompile(newVertexSource, newFragmentSource, newStaticUniforms) {
       const newProgram = link(
         gl,
         compile(gl, gl.VERTEX_SHADER, newVertexSource),
@@ -241,11 +254,13 @@ export function createRenderer(canvas, opts) {
       program = newProgram
       aPos = getAttrib(gl, program, 'a_position')
       Object.assign(u, getUniforms(gl, program, UNIFORM_NAMES))
+      if (newStaticUniforms) staticUniforms = newStaticUniforms
       bindAtlas()
       bindFluid()
       bindWord()
       gl.useProgram(program)
       gl.uniform1f(u.u_seed, seed)
+      applyStaticUniforms()
       this.resize()
     },
 
