@@ -2,7 +2,11 @@
 // Exposes density + velocity as a packed RGBA Uint8Array for GPU texture upload.
 
 import { addSource, diffuse, advect, project } from './fluid.js'
-import { fluidDiff, fluidVisc, fluidDt, fluidDecay } from './settings.js'
+import {
+  fluidDiff, fluidVisc, fluidDt, fluidDecay,
+  curlNoiseForce, curlNoiseScale, curlNoiseSpeed,
+  ambientDensity, ambientDensityPct,
+} from './settings.js'
 
 const DIFF  = fluidDiff
 const VISC  = fluidVisc
@@ -26,6 +30,13 @@ export function createSimulation(cols, rows) {
 
   let currentCols = cols
   let currentRows = rows
+  let frameIdx    = 0   // for time-evolving curl noise
+
+  // Simple 2D noise for curl computation (fast, no dependencies)
+  function noise2d(x, y) {
+    const s = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453
+    return s - Math.floor(s)  // [0, 1]
+  }
 
   function resize(newCols, newRows) {
     if (newCols === currentCols && newRows === currentRows) return
@@ -109,6 +120,32 @@ export function createSimulation(cols, rows) {
 
     // Decay + clear source buffers
     const N = c * r
+
+    // ── Ambient curl-noise stirring ──
+    // Compute curl of a noise field → divergence-free force that creates swirls
+    const t = frameIdx++ * curlNoiseSpeed
+    const eps = 0.5  // finite-difference offset
+    const sc = curlNoiseScale
+    for (let j = 1; j < r - 1; j++) {
+      for (let i = 1; i < c - 1; i++) {
+        const x = i * sc + t
+        const y = j * sc + t * 0.7
+        // curl = dN/dy, -dN/dx  (90° rotation of gradient → divergence-free)
+        const ddy = noise2d(x, y + eps) - noise2d(x, y - eps)
+        const ddx = noise2d(x + eps, y) - noise2d(x - eps, y)
+        const idx = j * c + i
+        state.vxPrev[idx] += ddy * curlNoiseForce
+        state.vyPrev[idx] -= ddx * curlNoiseForce
+      }
+    }
+
+    // ── Ambient density injection ──
+    const count = Math.max(1, (N * ambientDensityPct) | 0)
+    for (let k = 0; k < count; k++) {
+      const idx = (Math.random() * N) | 0
+      state.densityPrev[idx] += ambientDensity
+    }
+
     for (let i = 0; i < N; i++) {
       state.vx[i] *= DECAY
       state.vy[i] *= DECAY
