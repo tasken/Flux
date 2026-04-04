@@ -21,6 +21,8 @@ export const wordFlapStagger   = 6       // frame delay per letter position
 export const wordFlapFrameSkip = 2       // step flap every N frames
 export const wordCanvasW       = 1024    // word bitmap width  (px)
 export const wordCanvasH       = 128     // word bitmap height (px)
+export const wordFontSize      = 75      // fixed word font size (px)
+export const wordScaleY        = 0.25    // vertical scale for lyric aspect ratio
 
 // ── Fluid simulation ─────────────────────────────────────────────────────────
 export const fluidDiff       = 0.00001
@@ -28,6 +30,13 @@ export const fluidVisc       = 0.00001
 export const fluidDt         = 0.12
 export const fluidDecay      = 0.985
 export const fluidIterations = 20       // Gauss-Seidel solver iterations
+
+// ── Ambient stirring ─────────────────────────────────────────────────────────
+export const curlNoiseForce    = 0.4     // curl-noise velocity injection strength
+export const curlNoiseScale    = 0.08    // spatial frequency of the curl field
+export const curlNoiseSpeed    = 0.0004  // time multiplier for curl evolution
+export const ambientDensity    = 0.15    // density injected per chosen cell per frame
+export const ambientDensityPct = 0.002   // fraction of cells that receive density each frame
 
 // ── Procedural field ─────────────────────────────────────────────────────────
 export const fieldTimeScale  = 0.0006    // time → shader time multiplier
