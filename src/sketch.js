@@ -12,6 +12,13 @@ import {
 
 export const config = { fontSize, fontFamily, chars }
 
+export const staticUniforms = {
+  u_fieldTimeScale:   fieldTimeScale,
+  u_fieldAmplitude:   fieldAmplitude,
+  u_wordAspect:       wordCanvasH / wordCanvasW,
+  u_densityCharCount: densityChars.length,
+}
+
 // Emit GLSL float literals — ensures e.g. 3 becomes "3.0" not "3"
 const g = (v) => Number(v).toFixed(4)
 
@@ -42,6 +49,10 @@ uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
 uniform float     u_seed;          // random offset so each page load is unique
 uniform sampler2D u_wordTex;       // word bitmap (small canvas, scaled to fill screen)
+uniform float     u_fieldTimeScale;  // time → shader time multiplier
+uniform float     u_fieldAmplitude;  // background noise strength
+uniform float     u_wordAspect;      // wordCanvasH / wordCanvasW
+uniform float     u_densityCharCount; // number of chars in the density ramp
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
 // Perceptually uniform: equal L steps look equally bright regardless of hue.
@@ -141,8 +152,8 @@ void main() {
   float fSpeed   = fluid.a;                       // [0, 1]
 
   // ── Procedural background (gentle ambient motion) ──
-  float t     = u_time * ${g(fieldTimeScale)} + u_seed;
-  float bgVal = procValue(uv, t) * ${g(fieldAmplitude)};          // bold ambient backdrop
+  float t     = u_time * u_fieldTimeScale + u_seed;
+  float bgVal = procValue(uv, t) * u_fieldAmplitude;              // bold ambient backdrop
 
   // ── Warp UV by fluid velocity for organic distortion ──
   uv += vec2(fVx, fVy) * 0.4;
@@ -166,8 +177,7 @@ void main() {
   // Scale the word bitmap to fill the whole grid and warp it with noise.
   // The bitmap's brightness drives the background density → huge letters
   // emerge from the character field.
-  float aspect = (u_gridSize.x / u_gridSize.y)
-               * (${g(wordCanvasH)} / ${g(wordCanvasW)});  // grid aspect / tex aspect
+  float aspect = (u_gridSize.x / u_gridSize.y) * u_wordAspect;  // grid aspect / tex aspect
   vec2 wuv;
   if (aspect < 1.0) {
     // Grid is taller than texture — fit to width
@@ -188,7 +198,7 @@ void main() {
   d = mix(d, max(d, 0.9), wordSample);
 
   // Map density → character index (using density chars)
-  float charIdx = clamp(floor(d * ${g(densityChars.length)}), 0.0, ${g(densityChars.length - 1)});
+  float charIdx = clamp(floor(d * u_densityCharCount), 0.0, u_densityCharCount - 1.0);
 
   // Local UV within this cell → sample the font atlas
   vec2 localUV = fract(fc / u_cellSize);
