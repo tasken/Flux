@@ -3,22 +3,25 @@
 // creating HUGE background letters made of smaller density characters.
 // Inspired by the ertdfgcvb.xyz departure-board + giant-letter effect.
 
-import { wordFlapStagger, wordFlapFrameSkip, wordCanvasW, wordCanvasH, fontFamily } from './settings.js'
+import { wordFlapStagger, wordFlapFrameSkip, wordCanvasW, wordCanvasH, wordFontSize, wordScaleY, fontFamily } from './settings.js'
 
 const LINES = [
   'WE LEFT ALL THE PAIN BEHIND',
   'WE DON\'T HAVE TO WORRY',
-  'WE DON\'T HAVE TO HOLD ON',
+  'AND WE DON\'T HAVE TO HOLD ON',
   'TO PAIN WE LEFT BEHIND',
   'WOUNDS GET HEALED WITH TIME',
-  'ALL THE LOVE AND ALL THE SHINE',
-  'YOU ALWAYS WANT IT ALL THE TIME',
-  'TONIGHT',
+  'AND NOW YOU GOT ALL THE LOVE AND ALL THE SHINE',
+  'YOU ALWAYS WANT IT ALL THE TIME, TONIGHT',
   'IT\'S WHAT YOU DESERVE',
-  'I SAID',
+  'AND NOW YOU GOT ALL THE LOVE AND ALL THE SHINE',
+  'YOU ALWAYS WANT IT ALL THE TIME, YEAH, YEAH',
+  'I SAID WE GOT ALL THE LOVE AND ALL THE SHINE',
+  'YOU ALWAYS WANT IT ALL THE TIME',
 ]
 
 const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?\'"0123456789-'
+const MAX_LINE_CHARS = 23
 
 const W = wordCanvasW, H = wordCanvasH
 
@@ -32,10 +35,108 @@ export function createWordCycler() {
   const next    = []
   const delay   = []
 
+  let targetLayout = []
+  let nextLayout = []
+
   const canvas = document.createElement('canvas')
   canvas.width  = W
   canvas.height = H
   const ctx = canvas.getContext('2d')
+
+  const idealSize = wordFontSize
+  ctx.font = `bold ${idealSize}px ${fontFamily}`
+
+  function glyphAdvance(ch) {
+    const width = ctx.measureText(ch).width
+    return ch === ' ' ? width * 0.75 : width
+  }
+
+  function runWidth(str) {
+    let width = 0
+    for (let i = 0; i < str.length; i++) width += glyphAdvance(str[i])
+    return width
+  }
+
+  function findWrapIndex(str) {
+    if (str.length <= MAX_LINE_CHARS) return -1
+
+    const mid = Math.floor(str.length * 0.5)
+    let best = -1
+    let bestDist = Infinity
+
+    for (let i = 1; i < str.length - 1; i++) {
+      if (str[i] !== ' ') continue
+      const dist = Math.abs(i - mid)
+      if (dist < bestDist) {
+        best = i
+        bestDist = dist
+      }
+    }
+
+    return best >= 0 ? best : mid
+  }
+
+  // Build per-slot positions from real font metrics so old and new lines
+  // can coexist during a transition without moving each other.
+  function buildLayout(charIndices) {
+    let lastVisible = -1
+    for (let i = charIndices.length - 1; i >= 0; i--) {
+      if (charIndices[i] !== 0) { lastVisible = i; break }
+    }
+    if (lastVisible < 0) {
+      return new Array(charIndices.length).fill(null).map(() => ({ x: W * 0.5, y: H * 0.5 }))
+    }
+    const metrics = ctx.measureText('Mg')
+    const asc = metrics.fontBoundingBoxAscent ?? idealSize * 0.78
+    const desc = metrics.fontBoundingBoxDescent ?? idealSize * 0.22
+    const lineBox = asc + desc
+    const lineGap = 0
+
+    const str = charIndices
+      .slice(0, lastVisible + 1)
+      .map(i => ALPHABET[i])
+      .join('')
+    const wrapIndex = findWrapIndex(str)
+    const line1 = wrapIndex < 0 ? str : str.slice(0, wrapIndex).trimEnd()
+    const line2 = wrapIndex < 0 ? '' : str.slice(wrapIndex).trimStart()
+    const totalHeight = line2 ? lineBox * 2 + lineGap : lineBox
+    const topY = (H - totalHeight) * 0.5
+    const y1 = topY + asc
+    const y2 = line2 ? topY + lineBox + lineGap + asc : y1
+    const startX1 = W * 0.5 - runWidth(line1) * 0.5
+    const startX2 = W * 0.5 - runWidth(line2) * 0.5
+
+    const layout = new Array(charIndices.length)
+    let x1 = startX1
+    let x2 = startX2
+    let row = 1
+
+    for (let i = 0; i <= lastVisible; i++) {
+      const ch = str[i]
+      if (row === 1 && wrapIndex >= 0 && i >= wrapIndex) row = 2
+
+      if (row === 1) {
+        layout[i] = { x: x1, y: y1 }
+        x1 += glyphAdvance(ch)
+      } else {
+        layout[i] = { x: x2, y: y2 }
+        x2 += glyphAdvance(ch)
+      }
+    }
+
+    const tailPos = row === 1 ? { x: x1, y: y1 } : { x: x2, y: y2 }
+    for (let i = lastVisible + 1; i < charIndices.length; i++) {
+      layout[i] = tailPos
+    }
+    return layout
+  }
+
+  function setCenterOutDelays(len) {
+    const center = (len - 1) * 0.5
+    for (let i = 0; i < len; i++) {
+      delay[i] = Math.round(Math.abs(i - center)) * wordFlapStagger
+    }
+  }
 
   function getLineChars(idx) {
     const word = LINES[idx % LINES.length].toUpperCase()
@@ -60,8 +161,12 @@ export function createWordCycler() {
     for (let i = 0; i < maxLen; i++) {
       target[i] = i < chars.length ? chars[i] : 0
       next[i]   = i < nextChars.length ? nextChars[i] : 0
-      delay[i]  = i * wordFlapStagger
     }
+
+    setCenterOutDelays(maxLen)
+
+    targetLayout = buildLayout(target)
+    nextLayout = buildLayout(next)
     phase = 'arrive'
   }
 
@@ -77,9 +182,7 @@ export function createWordCycler() {
       }
       if (allArrived) {
         phase = 'depart'
-        for (let i = 0; i < target.length; i++) {
-          delay[i] = i * wordFlapStagger
-        }
+        setCenterOutDelays(target.length)
       }
     } else {
       let allDone = true
@@ -96,25 +199,23 @@ export function createWordCycler() {
 
   function render() {
     ctx.clearRect(0, 0, W, H)
-    const word = current.map(i => ALPHABET[i]).join('')
 
-    // Start with ideal font size, scale down if text overflows canvas width
-    const idealSize = H * 0.82
-    ctx.font = `bold ${idealSize}px ${fontFamily}`
-    const measured = ctx.measureText(word)
-    const scale = Math.min(1, (W * 0.94) / (measured.width || 1))
-    if (scale < 1) ctx.font = `bold ${idealSize * scale}px ${fontFamily}`
+    const fontSize = idealSize
+    ctx.font = `bold ${fontSize}px ${fontFamily}`
 
-    // Use real font metrics for vertical centering when available
-    const m  = ctx.measureText(word)
-    const asc  = m.fontBoundingBoxAscent  ?? idealSize * scale * 0.78
-    const desc = m.fontBoundingBoxDescent ?? idealSize * scale * 0.22
-    const yOff = (H - (asc + desc)) / 2 + asc
-
+    ctx.save()
+    ctx.translate(0, H * 0.5 * (1 - wordScaleY))
+    ctx.scale(1, wordScaleY)
     ctx.textBaseline = 'alphabetic'
-    ctx.textAlign    = 'center'
+    ctx.textAlign    = 'left'
     ctx.fillStyle    = '#fff'
-    ctx.fillText(word, W / 2, yOff)
+    for (let i = 0; i < current.length; i++) {
+      const ch = ALPHABET[current[i]]
+      if (ch === ' ') continue
+      const pos = phase === 'depart' && delay[i] <= 0 ? nextLayout[i] : targetLayout[i]
+      ctx.fillText(ch, pos.x, pos.y)
+    }
+    ctx.restore()
   }
 
   /** Call once per frame. Returns the canvas for GPU texture upload. */
