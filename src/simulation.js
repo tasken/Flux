@@ -38,6 +38,15 @@ export function createSimulation(cols, rows) {
     return s - Math.floor(s)  // [0, 1]
   }
 
+  /**
+   * Resize the simulation grid. All internal Float32Array buffers are
+   * recreated at the new size and re-assigned onto `state` via Object.assign.
+   *
+   * IMPORTANT: Callers must never cache direct references to buffer properties
+   * (e.g. `const d = sim.density`). Always access them through the returned
+   * state object (e.g. `sim.density`, `sim.pixels`). Internal functions
+   * (`step`, `injectForce`) are safe because they always read through `state`.
+   */
   function resize(newCols, newRows) {
     if (newCols === currentCols && newRows === currentRows) return
 
