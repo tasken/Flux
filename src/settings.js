@@ -22,7 +22,10 @@ export const wordFlapFrameSkip = 2       // step flap every N frames
 export const wordCanvasW       = 1024    // word bitmap width  (px)
 export const wordCanvasH       = 128     // word bitmap height (px)
 export const wordFontSize      = 75      // fixed word font size (px)
-export const wordScaleY        = 0.25    // vertical scale for lyric aspect ratio
+export const wordScaleY        = 0.25    // intentional vertical squash on the word bitmap.
+                                          // Values < 1 compress letters vertically, creating
+                                          // the tall/narrow split-flap aesthetic in the
+                                          // giant background characters. Tune freely (0.1–1.0).
 
 // ── Fluid simulation ─────────────────────────────────────────────────────────
 export const fluidDiff       = 0.00001
