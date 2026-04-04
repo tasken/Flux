@@ -204,6 +204,8 @@ export function createWordCycler() {
     ctx.font = `bold ${fontSize}px ${fontFamily}`
 
     ctx.save()
+    // Squash text vertically so giant background letters have a compressed,
+    // split-flap aesthetic.  wordScaleY < 1 = taller/narrower chars.
     ctx.translate(0, H * 0.5 * (1 - wordScaleY))
     ctx.scale(1, wordScaleY)
     ctx.textBaseline = 'alphabetic'
