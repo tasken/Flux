@@ -18,8 +18,6 @@ const UNIFORM_NAMES = [
   'u_seed',
   'u_wordTex',
   'u_wordDepartTex',
-  'u_wordDepartProgress',
-  'u_wordDepartFadeProgress',
   'u_overlayTex',
   'u_fieldTimeScale',
   'u_fieldAmplitude',
@@ -266,7 +264,7 @@ export function createRenderer(canvas, opts) {
       return { cols, rows }
     },
 
-    draw(time, pointer = {}, effects = {}) {
+    draw(time, pointer = {}) {
       const {
         x = 0.5,
         y = 0.5,
@@ -275,9 +273,6 @@ export function createRenderer(canvas, opts) {
         active = 0,
         down = 0,
       } = pointer
-      const {
-        wordDepartProgress = 1,
-      } = effects
 
       gl.useProgram(program)
       gl.uniform1f(u.u_time, time)
@@ -285,7 +280,6 @@ export function createRenderer(canvas, opts) {
       gl.uniform2f(u.u_pointerDelta, dx, dy)
       gl.uniform1f(u.u_pointerActive, active)
       gl.uniform1f(u.u_pointerDown, down)
-      gl.uniform1f(u.u_wordDepartProgress, wordDepartProgress)
       gl.bindBuffer(gl.ARRAY_BUFFER, buf)
       gl.enableVertexAttribArray(aPos)
       gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)

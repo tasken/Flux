@@ -27,9 +27,6 @@ export const wordGlyphLineHeight = 0.75
 export const wordFlapStagger = 6
 export const wordFlapFrameSkip = 2
 
-// Fade-out completes by this fraction of the incoming line's printed progress.
-export const wordDepartFadeProgress = 0.2222
-
 // ── Fluid Simulation ─────────────────────────────────────────────────────────
 export const fluidDiffusion = 0.00001
 export const fluidViscosity = 0.00001
