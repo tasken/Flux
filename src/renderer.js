@@ -76,7 +76,7 @@ function getUniforms(gl, program, names) {
 // Renders every character in `chars` into a single-row RGBA texture.
 // The alpha channel carries the antialiased glyph shape.
 
-function createAtlas(gl, chars, fontSize, fontFamily, lineHeight = 1) {
+function createAtlas(gl, chars, fontSize, fontFamily, cellWidthUnits = 1, cellHeightUnits = 1) {
   const tmp = document.createElement('canvas')
   const tctx = tmp.getContext('2d')
   if (!tctx) throw new Error('2D canvas context not available for font atlas')
@@ -84,6 +84,7 @@ function createAtlas(gl, chars, fontSize, fontFamily, lineHeight = 1) {
 
   let charWidth = 0
   for (const ch of chars) {
+    if (ch === ' ') continue
     charWidth = Math.max(charWidth, Math.ceil(tctx.measureText(ch).width))
   }
   if (charWidth === 0) charWidth = Math.ceil(tctx.measureText('M').width)
@@ -92,8 +93,9 @@ function createAtlas(gl, chars, fontSize, fontFamily, lineHeight = 1) {
   const mRef    = tctx.measureText('Mg|')
   const ascent  = Math.ceil(mRef.fontBoundingBoxAscent  ?? fontSize * 0.85)
   const descent = Math.ceil(mRef.fontBoundingBoxDescent ?? fontSize * 0.35)
-  const baseHeight = ascent + descent
-  const charHeight = Math.max(1, Math.ceil(baseHeight * lineHeight))
+  const safeCellWidthUnits = Math.max(1, cellWidthUnits)
+  const safeCellHeightUnits = Math.max(1, cellHeightUnits)
+  const charHeight = Math.max(1, Math.ceil(charWidth * safeCellHeightUnits / safeCellWidthUnits))
 
   const atlas = document.createElement('canvas')
   atlas.width  = charWidth * chars.length
@@ -123,7 +125,15 @@ function createAtlas(gl, chars, fontSize, fontFamily, lineHeight = 1) {
 // ── public API ────────────────────────────────────────────────────────────────
 
 export function createRenderer(canvas, opts) {
-  const { vertexSource, fragmentSource, fontSize, lineHeight = 1, fontFamily, chars } = opts
+  const {
+    vertexSource,
+    fragmentSource,
+    fontSize,
+    cellWidthUnits = 1,
+    cellHeightUnits = 1,
+    fontFamily,
+    chars,
+  } = opts
   let staticUniforms = opts.staticUniforms || {}
   if (!chars?.length) throw new Error('Renderer requires at least one character')
 
@@ -136,7 +146,7 @@ export function createRenderer(canvas, opts) {
     compile(gl, gl.FRAGMENT_SHADER, fragmentSource),
   )
   let dpr = window.devicePixelRatio || 1
-  let atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily, lineHeight)
+  let atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily, cellWidthUnits, cellHeightUnits)
 
   // fullscreen quad  (-1…1 clip space)
   const buf = gl.createBuffer()
@@ -238,7 +248,7 @@ export function createRenderer(canvas, opts) {
       if (nextDpr !== dpr) {
         dpr = nextDpr
         gl.deleteTexture(atlas.tex)
-        atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily, lineHeight)
+        atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily, cellWidthUnits, cellHeightUnits)
         bindAtlas()
       }
 

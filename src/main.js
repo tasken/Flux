@@ -3,7 +3,7 @@ import { vertexSource, fragmentSource, config, staticUniforms } from './sketch.j
 import { createSimulation } from './simulation.js'
 import { createCharOverlay } from './overlay.js'
 import { createWordCycler } from './words.js'
-import { gridLineHeight, pointerMoveForce, pointerDownForce, pointerMoveDensity, pointerDownDensity, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
+import { gridCellWidthUnits, gridCellHeightUnits, pointerMoveForce, pointerDownForce, pointerMoveDensity, pointerDownDensity, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
 
 const BUILD_DETAIL_LINES = [
   `COMMIT ${__COMMIT_HASH__.toUpperCase()}`,
@@ -49,7 +49,14 @@ async function boot() {
     console.warn(`Font "${fontFamily}" not loaded, proceeding with fallback`)
   }
 
-  const renderer = createRenderer(canvas, { vertexSource, fragmentSource, lineHeight: gridLineHeight, ...config, staticUniforms })
+  const renderer = createRenderer(canvas, {
+    vertexSource,
+    fragmentSource,
+    cellWidthUnits: gridCellWidthUnits,
+    cellHeightUnits: gridCellHeightUnits,
+    ...config,
+    staticUniforms,
+  })
   const overlay = createCharOverlay(BUILD_DETAIL_LINES)
   const wordCycler = createWordCycler()
 

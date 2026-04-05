@@ -3,19 +3,22 @@
 // ── Typography / Grid ────────────────────────────────────────────────────────
 export const fontFamily = "'IBM Plex Mono', monospace"
 export const gridFontSize = 12
-export const gridLineHeight = 0.8
+
+// Character cell box ratio used by the atlas and on-screen grid.
+export const gridCellWidthUnits = 2
+export const gridCellHeightUnits = 3
 
 // Ordered sparse → dense for the procedural character field.
 export const gridDensityChars = ' _.,-=+:;cba!?0123456789$W#@Ñ'
 
 // ── Giant Background Words: Bitmap ───────────────────────────────────────────
 export const wordCanvasWidth = 1024
-export const wordCanvasHeight = 128
+export const wordCanvasHeight = 256
 export const wordFontSize = 75
 
 // ── Giant Background Words: Glyph Shape ─────────────────────────────────────
 // `wordGlyphScaleY`: 1 keeps the glyphs at normal height, 0 compresses them maximally.
-export const wordGlyphScaleY = 0.3
+export const wordGlyphScaleY = 1
 
 // `wordGlyphLineHeight`: 1 follows the font metrics, lower values tighten wrapped lines.
 export const wordGlyphLineHeight = 0.75

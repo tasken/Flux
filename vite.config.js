@@ -40,7 +40,7 @@ function readGitMetadata(rootDir) {
         ?.split(' ')[0]
 
     return {
-      hash: (hash || 'DEV').slice(0, 10),
+      hash: (hash || 'DEV').slice(0, 7),
       branch: ref.split('/').at(-1) || 'LOCAL',
     }
   } catch {
@@ -60,7 +60,7 @@ function formatGmtMinus3(date) {
   const minutes = String(shifted.getUTCMinutes()).padStart(2, '0')
   const meridiem = shifted.getUTCHours() >= 12 ? 'PM' : 'AM'
 
-  return `${year}-${month}-${day}T${hours}:${minutes} ${meridiem} GMT-3`
+  return `${year}-${month}-${day}T${hours}:${minutes} ${meridiem} ART`
 }
 
 const { hash: commitHash, branch: buildBranch } = readGitMetadata(process.cwd())
