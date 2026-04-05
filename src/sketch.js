@@ -49,6 +49,7 @@ uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
 uniform float     u_seed;          // random offset so each page load is unique
 uniform sampler2D u_wordTex;       // word bitmap (small canvas, scaled to fill screen)
+uniform sampler2D u_overlayTex;    // per-cell overlay chars for hover details
 uniform float     u_fieldTimeScale;  // time → shader time multiplier
 uniform float     u_fieldAmplitude;  // background noise strength
 uniform float     u_wordAspect;      // wordCanvasH / wordCanvasW
@@ -199,6 +200,12 @@ void main() {
 
   // Map density → character index (using density chars)
   float charIdx = clamp(floor(d * u_densityCharCount), 0.0, u_densityCharCount - 1.0);
+
+  vec4 overlay = texture2D(u_overlayTex, fluidUV);
+  if (overlay.a > 0.0) {
+    charIdx = floor(overlay.r * 255.0 + 0.5);
+    d = max(d, 0.82);
+  }
 
   // Local UV within this cell → sample the font atlas
   vec2 localUV = fract(fc / u_cellSize);

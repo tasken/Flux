@@ -4,10 +4,11 @@
 
 // ── Grid / Font ───────────────────────────────────────────────────────────────
 export const fontSize   = 12
+export const lineHeight = .8
 export const fontFamily = "'IBM Plex Mono', monospace"
 
 // Density chars: ordered sparse → dense, used for procedural background.
-export const densityChars = ' .·:;-=+*abcXYZ#@W'
+export const densityChars = ' _.,-=+:;cba!?0123456789$W#@Ñ'
 
 // All characters that can appear in word text.
 const wordAlphabet = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!\'"0123456789-'

@@ -1,8 +1,14 @@
 import { createRenderer } from './renderer.js'
 import { vertexSource, fragmentSource, config, staticUniforms } from './sketch.js'
 import { createSimulation } from './simulation.js'
+import { createCharOverlay } from './overlay.js'
 import { createWordCycler } from './words.js'
-import { pointerForce, pointerForceDown, pointerDensity, pointerDensityDown, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
+import { lineHeight, pointerForce, pointerForceDown, pointerDensity, pointerDensityDown, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
+
+const BUILD_DETAIL_LINES = [
+  `COMMIT ${__COMMIT_HASH__.toUpperCase()}`,
+  `BUILT ${__BUILD_TIME__.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
+]
 
 function showBootError(message) {
   let panel = document.getElementById('boot-error')
@@ -43,8 +49,17 @@ async function boot() {
     console.warn(`Font "${fontFamily}" not loaded, proceeding with fallback`)
   }
 
-  const renderer = createRenderer(canvas, { vertexSource, fragmentSource, ...config, staticUniforms })
+  const renderer = createRenderer(canvas, { vertexSource, fragmentSource, lineHeight, ...config, staticUniforms })
+  const overlay = createCharOverlay(BUILD_DETAIL_LINES)
   const wordCycler = createWordCycler()
+
+  function showBuildDetails() {
+    overlay.show()
+  }
+
+  function hideBuildDetails() {
+    overlay.hide()
+  }
 
   let sim = null  // created after first resize when grid dimensions are known
   const pointer = {
@@ -94,6 +109,8 @@ async function boot() {
     // Update word bitmap each frame (cheap: small canvas + texture upload)
     const wordCanvas = wordCycler.update()
     renderer.uploadWordTexture(wordCanvas)
+    const overlayState = overlay.update()
+    renderer.uploadOverlay(overlayState.pixels, overlayState.cols, overlayState.rows)
 
     pointer.dx *= pointerDeltaDecay
     pointer.dy *= pointerDeltaDecay
@@ -103,6 +120,7 @@ async function boot() {
 
   function handleResize() {
     const { cols, rows } = renderer.resize()
+    overlay.resize(cols, rows)
     if (!sim) {
       sim = createSimulation(cols, rows)
     } else {
@@ -117,11 +135,13 @@ async function boot() {
   function handlePointerEnter(event) {
     updatePointer(event)
     pointer.active = 1
+    showBuildDetails()
   }
 
   function handlePointerLeave() {
     pointer.active = 0
     pointer.down = 0
+    hideBuildDetails()
   }
 
   function handlePointerDown(event) {

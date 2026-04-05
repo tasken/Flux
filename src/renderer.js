@@ -17,6 +17,7 @@ const UNIFORM_NAMES = [
   'u_fluid',
   'u_seed',
   'u_wordTex',
+  'u_overlayTex',
   'u_fieldTimeScale',
   'u_fieldAmplitude',
   'u_wordAspect',
@@ -72,7 +73,7 @@ function getUniforms(gl, program, names) {
 // Renders every character in `chars` into a single-row RGBA texture.
 // The alpha channel carries the antialiased glyph shape.
 
-function createAtlas(gl, chars, fontSize, fontFamily) {
+function createAtlas(gl, chars, fontSize, fontFamily, lineHeight = 1) {
   const tmp = document.createElement('canvas')
   const tctx = tmp.getContext('2d')
   if (!tctx) throw new Error('2D canvas context not available for font atlas')
@@ -88,7 +89,8 @@ function createAtlas(gl, chars, fontSize, fontFamily) {
   const mRef    = tctx.measureText('Mg|')
   const ascent  = Math.ceil(mRef.fontBoundingBoxAscent  ?? fontSize * 0.85)
   const descent = Math.ceil(mRef.fontBoundingBoxDescent ?? fontSize * 0.35)
-  const charHeight = ascent + descent
+  const baseHeight = ascent + descent
+  const charHeight = Math.max(1, Math.ceil(baseHeight * lineHeight))
 
   const atlas = document.createElement('canvas')
   atlas.width  = charWidth * chars.length
@@ -118,7 +120,7 @@ function createAtlas(gl, chars, fontSize, fontFamily) {
 // ── public API ────────────────────────────────────────────────────────────────
 
 export function createRenderer(canvas, opts) {
-  const { vertexSource, fragmentSource, fontSize, fontFamily, chars } = opts
+  const { vertexSource, fragmentSource, fontSize, lineHeight = 1, fontFamily, chars } = opts
   let staticUniforms = opts.staticUniforms || {}
   if (!chars?.length) throw new Error('Renderer requires at least one character')
 
@@ -131,7 +133,7 @@ export function createRenderer(canvas, opts) {
     compile(gl, gl.FRAGMENT_SHADER, fragmentSource),
   )
   let dpr = window.devicePixelRatio || 1
-  let atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily)
+  let atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily, lineHeight)
 
   // fullscreen quad  (-1…1 clip space)
   const buf = gl.createBuffer()
@@ -187,9 +189,24 @@ export function createRenderer(canvas, opts) {
     gl.uniform1i(u.u_wordTex, 2)
   }
 
+  let overlayTex = gl.createTexture()
+  gl.bindTexture(gl.TEXTURE_2D, overlayTex)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+  function bindOverlay() {
+    gl.useProgram(program)
+    gl.activeTexture(gl.TEXTURE3)
+    gl.bindTexture(gl.TEXTURE_2D, overlayTex)
+    gl.uniform1i(u.u_overlayTex, 3)
+  }
+
   bindAtlas()
   bindFluid()
   bindWord()
+  bindOverlay()
 
   // Random seed set once per session — offsets time so each load looks different
   const seed = Math.random() * 1e5
@@ -203,7 +220,7 @@ export function createRenderer(canvas, opts) {
       if (nextDpr !== dpr) {
         dpr = nextDpr
         gl.deleteTexture(atlas.tex)
-        atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily)
+        atlas = createAtlas(gl, chars, Math.round(fontSize * dpr), fontFamily, lineHeight)
         bindAtlas()
       }
 
@@ -258,6 +275,7 @@ export function createRenderer(canvas, opts) {
       bindAtlas()
       bindFluid()
       bindWord()
+      bindOverlay()
       gl.useProgram(program)
       gl.uniform1f(u.u_seed, seed)
       applyStaticUniforms()
@@ -276,10 +294,17 @@ export function createRenderer(canvas, opts) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
     },
 
+    uploadOverlay(pixels, cols, rows) {
+      gl.activeTexture(gl.TEXTURE3)
+      gl.bindTexture(gl.TEXTURE_2D, overlayTex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+    },
+
     dispose() {
       gl.deleteTexture(atlas.tex)
       gl.deleteTexture(fluidTex)
       gl.deleteTexture(wordTex)
+      gl.deleteTexture(overlayTex)
       gl.deleteBuffer(buf)
       gl.deleteProgram(program)
     },
