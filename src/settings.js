@@ -8,8 +8,8 @@ export const gridFontSize = 12
 export const gridCellWidthUnits = 2
 export const gridCellHeightUnits = 3
 
-// Ordered sparse → dense for the procedural character field.
-export const gridDensityChars = ' _.,-=+:;cba!?0123456789$W#@Ñ'
+// Derived perceptual sparse → dense ramp for IBM Plex Mono Regular at 12px.
+export const gridDensityChars = ' ,:~+=7X965#0Q%@'
 
 // ── Giant Background Words: Bitmap ───────────────────────────────────────────
 export const wordCanvasWidth = 1024
