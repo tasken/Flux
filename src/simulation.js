@@ -3,15 +3,15 @@
 
 import { addSource, diffuse, advect, project } from './fluid.js'
 import {
-  fluidDiff, fluidVisc, fluidDt, fluidDecay,
-  curlNoiseForce, curlNoiseScale, curlNoiseSpeed,
-  ambientDensity, ambientDensityPct,
+  fluidDiffusion, fluidViscosity, fluidTimeStep, fluidVelocityDecay,
+  ambientCurlNoiseForce, ambientCurlNoiseScale, ambientCurlNoiseSpeed,
+  ambientDensityAmount, ambientDensityPct,
 } from './settings.js'
 
-const DIFF  = fluidDiff
-const VISC  = fluidVisc
-const DT    = fluidDt
-const DECAY = fluidDecay
+const DIFF = fluidDiffusion
+const VISC = fluidViscosity
+const DT = fluidTimeStep
+const DECAY = fluidVelocityDecay
 
 export function createSimulation(cols, rows) {
   const N = cols * rows
@@ -132,9 +132,9 @@ export function createSimulation(cols, rows) {
 
     // ── Ambient curl-noise stirring ──
     // Compute curl of a noise field → divergence-free force that creates swirls
-    const t = frameIdx++ * curlNoiseSpeed
+    const t = frameIdx++ * ambientCurlNoiseSpeed
     const eps = 0.5  // finite-difference offset
-    const sc = curlNoiseScale
+    const sc = ambientCurlNoiseScale
     for (let j = 1; j < r - 1; j++) {
       for (let i = 1; i < c - 1; i++) {
         const x = i * sc + t
@@ -143,8 +143,8 @@ export function createSimulation(cols, rows) {
         const ddy = noise2d(x, y + eps) - noise2d(x, y - eps)
         const ddx = noise2d(x + eps, y) - noise2d(x - eps, y)
         const idx = j * c + i
-        state.vxPrev[idx] += ddy * curlNoiseForce
-        state.vyPrev[idx] -= ddx * curlNoiseForce
+        state.vxPrev[idx] += ddy * ambientCurlNoiseForce
+        state.vyPrev[idx] -= ddx * ambientCurlNoiseForce
       }
     }
 
@@ -152,7 +152,7 @@ export function createSimulation(cols, rows) {
     const count = Math.max(1, (N * ambientDensityPct) | 0)
     for (let k = 0; k < count; k++) {
       const idx = (Math.random() * N) | 0
-      state.densityPrev[idx] += ambientDensity
+      state.densityPrev[idx] += ambientDensityAmount
     }
 
     for (let i = 0; i < N; i++) {

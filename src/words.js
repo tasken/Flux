@@ -3,7 +3,7 @@
 // creating HUGE background letters made of smaller density characters.
 // Inspired by the ertdfgcvb.xyz departure-board + giant-letter effect.
 
-import { wordFlapStagger, wordFlapFrameSkip, wordCanvasW, wordCanvasH, wordFontSize, wordScaleY, wordLineHeight, fontFamily } from './settings.js'
+import { wordFlapStagger, wordFlapFrameSkip, wordCanvasWidth, wordCanvasHeight, wordFontSize, wordGlyphScaleY, wordGlyphLineHeight, fontFamily } from './settings.js'
 
 const LINES = [
   'WE LEFT ALL THE PAIN BEHIND',
@@ -23,7 +23,7 @@ const LINES = [
 const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?\'"0123456789-'
 const MAX_LINE_CHARS = 23
 
-const W = wordCanvasW, H = wordCanvasH
+const W = wordCanvasWidth, H = wordCanvasHeight
 
 export function createWordCycler() {
   let wordIndex  = 0
@@ -42,6 +42,10 @@ export function createWordCycler() {
   canvas.width  = W
   canvas.height = H
   const ctx = canvas.getContext('2d')
+  const departCanvas = document.createElement('canvas')
+  departCanvas.width = W
+  departCanvas.height = H
+  const departCtx = departCanvas.getContext('2d')
 
   const idealSize = wordFontSize
   ctx.font = `bold ${idealSize}px ${fontFamily}`
@@ -55,6 +59,10 @@ export function createWordCycler() {
     let width = 0
     for (let i = 0; i < str.length; i++) width += glyphAdvance(str[i])
     return width
+  }
+
+  function charDistance(from, to) {
+    return (to - from + ALPHABET.length) % ALPHABET.length
   }
 
   function findWrapIndex(str) {
@@ -90,7 +98,7 @@ export function createWordCycler() {
     const asc = metrics.fontBoundingBoxAscent ?? idealSize * 0.78
     const desc = metrics.fontBoundingBoxDescent ?? idealSize * 0.22
     const lineBox = asc + desc
-    const lineAdvance = lineBox * wordLineHeight
+    const lineAdvance = lineBox * wordGlyphLineHeight
 
     const str = charIndices
       .slice(0, lastVisible + 1)
@@ -170,6 +178,25 @@ export function createWordCycler() {
     phase = 'arrive'
   }
 
+  function getDepartProgress() {
+    if (phase !== 'depart') return 1
+    if (target.length === 0) return 1
+
+    let progressSum = 0
+    for (let i = 0; i < target.length; i++) {
+      const totalDistance = charDistance(target[i], next[i])
+      if (totalDistance === 0) {
+        progressSum += 1
+        continue
+      }
+
+      const currentDistance = Math.min(totalDistance, charDistance(target[i], current[i]))
+      progressSum += currentDistance / totalDistance
+    }
+
+    return progressSum / target.length
+  }
+
   function stepFlap() {
     if (phase === 'arrive') {
       let allArrived = true
@@ -197,38 +224,67 @@ export function createWordCycler() {
     }
   }
 
+  function prepareTextRender(renderCtx) {
+    const fontSize = idealSize
+    const scaleY = Math.max(0, Math.min(1, wordGlyphScaleY))
+    renderCtx.font = `bold ${fontSize}px ${fontFamily}`
+
+    renderCtx.save()
+    // 1 keeps the original glyph height; 0 pushes toward maximum compression.
+    renderCtx.translate(0, H * 0.5 * (1 - scaleY))
+    renderCtx.scale(1, Math.max(scaleY, 0.0001))
+    renderCtx.textBaseline = 'alphabetic'
+    renderCtx.textAlign    = 'left'
+    renderCtx.fillStyle    = '#fff'
+  }
+
+  function finishTextRender(renderCtx) {
+    renderCtx.restore()
+  }
+
+  function renderInto(renderCtx, charsToDraw, layout) {
+    renderCtx.clearRect(0, 0, W, H)
+    prepareTextRender(renderCtx)
+    for (let i = 0; i < charsToDraw.length; i++) {
+      const ch = ALPHABET[charsToDraw[i]]
+      if (ch === ' ') continue
+      const pos = layout[i]
+      renderCtx.fillText(ch, pos.x, pos.y)
+    }
+    finishTextRender(renderCtx)
+  }
+
   function render() {
     ctx.clearRect(0, 0, W, H)
-
-    const fontSize = idealSize
-    const scaleY = Math.max(0, Math.min(1, wordScaleY))
-    ctx.font = `bold ${fontSize}px ${fontFamily}`
-
-    ctx.save()
-    // 1 keeps the original glyph height; 0 pushes toward maximum compression.
-    ctx.translate(0, H * 0.5 * (1 - scaleY))
-    ctx.scale(1, Math.max(scaleY, 0.0001))
-    ctx.textBaseline = 'alphabetic'
-    ctx.textAlign    = 'left'
-    ctx.fillStyle    = '#fff'
+    prepareTextRender(ctx)
     for (let i = 0; i < current.length; i++) {
       const ch = ALPHABET[current[i]]
       if (ch === ' ') continue
       const pos = phase === 'depart' && delay[i] <= 0 ? nextLayout[i] : targetLayout[i]
       ctx.fillText(ch, pos.x, pos.y)
     }
-    ctx.restore()
+    finishTextRender(ctx)
+
+    if (phase === 'depart') {
+      renderInto(departCtx, current, targetLayout)
+    } else {
+      departCtx.clearRect(0, 0, W, H)
+    }
   }
 
-  /** Call once per frame. Returns the canvas for GPU texture upload. */
+  /** Call once per frame. Returns canvases + transition state for GPU upload. */
   function update() {
     if (frameCount++ % wordFlapFrameSkip === 0) stepFlap()
     render()
-    return canvas
+    return {
+      canvas,
+      departCanvas,
+      departProgress: getDepartProgress(),
+    }
   }
 
   loadLine()
   render()
 
-  return { update, canvas }
+  return { update, canvas, departCanvas }
 }

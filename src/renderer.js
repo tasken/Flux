@@ -17,6 +17,9 @@ const UNIFORM_NAMES = [
   'u_fluid',
   'u_seed',
   'u_wordTex',
+  'u_wordDepartTex',
+  'u_wordDepartProgress',
+  'u_wordDepartFadeProgress',
   'u_overlayTex',
   'u_fieldTimeScale',
   'u_fieldAmplitude',
@@ -189,6 +192,20 @@ export function createRenderer(canvas, opts) {
     gl.uniform1i(u.u_wordTex, 2)
   }
 
+  let wordDepartTex = gl.createTexture()
+  gl.bindTexture(gl.TEXTURE_2D, wordDepartTex)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+  function bindWordDepart() {
+    gl.useProgram(program)
+    gl.activeTexture(gl.TEXTURE3)
+    gl.bindTexture(gl.TEXTURE_2D, wordDepartTex)
+    gl.uniform1i(u.u_wordDepartTex, 3)
+  }
+
   let overlayTex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, overlayTex)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
@@ -198,14 +215,15 @@ export function createRenderer(canvas, opts) {
 
   function bindOverlay() {
     gl.useProgram(program)
-    gl.activeTexture(gl.TEXTURE3)
+    gl.activeTexture(gl.TEXTURE4)
     gl.bindTexture(gl.TEXTURE_2D, overlayTex)
-    gl.uniform1i(u.u_overlayTex, 3)
+    gl.uniform1i(u.u_overlayTex, 4)
   }
 
   bindAtlas()
   bindFluid()
   bindWord()
+  bindWordDepart()
   bindOverlay()
 
   // Random seed set once per session — offsets time so each load looks different
@@ -239,7 +257,7 @@ export function createRenderer(canvas, opts) {
       return { cols, rows }
     },
 
-    draw(time, pointer = {}) {
+    draw(time, pointer = {}, effects = {}) {
       const {
         x = 0.5,
         y = 0.5,
@@ -248,6 +266,9 @@ export function createRenderer(canvas, opts) {
         active = 0,
         down = 0,
       } = pointer
+      const {
+        wordDepartProgress = 1,
+      } = effects
 
       gl.useProgram(program)
       gl.uniform1f(u.u_time, time)
@@ -255,6 +276,7 @@ export function createRenderer(canvas, opts) {
       gl.uniform2f(u.u_pointerDelta, dx, dy)
       gl.uniform1f(u.u_pointerActive, active)
       gl.uniform1f(u.u_pointerDown, down)
+      gl.uniform1f(u.u_wordDepartProgress, wordDepartProgress)
       gl.bindBuffer(gl.ARRAY_BUFFER, buf)
       gl.enableVertexAttribArray(aPos)
       gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
@@ -275,6 +297,7 @@ export function createRenderer(canvas, opts) {
       bindAtlas()
       bindFluid()
       bindWord()
+      bindWordDepart()
       bindOverlay()
       gl.useProgram(program)
       gl.uniform1f(u.u_seed, seed)
@@ -294,8 +317,14 @@ export function createRenderer(canvas, opts) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
     },
 
-    uploadOverlay(pixels, cols, rows) {
+    uploadDepartWordTexture(canvas) {
       gl.activeTexture(gl.TEXTURE3)
+      gl.bindTexture(gl.TEXTURE_2D, wordDepartTex)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+    },
+
+    uploadOverlay(pixels, cols, rows) {
+      gl.activeTexture(gl.TEXTURE4)
       gl.bindTexture(gl.TEXTURE_2D, overlayTex)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
     },
@@ -304,6 +333,7 @@ export function createRenderer(canvas, opts) {
       gl.deleteTexture(atlas.tex)
       gl.deleteTexture(fluidTex)
       gl.deleteTexture(wordTex)
+      gl.deleteTexture(wordDepartTex)
       gl.deleteTexture(overlayTex)
       gl.deleteBuffer(buf)
       gl.deleteProgram(program)

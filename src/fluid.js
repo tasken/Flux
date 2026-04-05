@@ -1,9 +1,9 @@
 // Navier-Stokes fluid solver — Jos Stam, "Real-Time Fluid Dynamics for Games" (GDC 1999)
 // All functions are pure: they take typed arrays and mutate them in-place.
 
-import { fluidIterations } from './settings.js'
+import { fluidSolverIterations } from './settings.js'
 
-const ITER = fluidIterations
+const ITER = fluidSolverIterations
 
 /**
  * Add source field src into dst, scaled by timestep dt.
