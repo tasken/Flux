@@ -31,9 +31,11 @@ export function createWordCycler() {
   let phase      = 'arrive'
 
   const current = []
+  const departCurrent = []
   const target  = []
   const next    = []
   const delay   = []
+  const departDelay = []
 
   let targetLayout = []
   let nextLayout = []
@@ -59,10 +61,6 @@ export function createWordCycler() {
     let width = 0
     for (let i = 0; i < str.length; i++) width += glyphAdvance(str[i])
     return width
-  }
-
-  function charDistance(from, to) {
-    return (to - from + ALPHABET.length) % ALPHABET.length
   }
 
   function findWrapIndex(str) {
@@ -139,10 +137,10 @@ export function createWordCycler() {
     return layout
   }
 
-  function setCenterOutDelays(len) {
+  function setCenterOutDelays(buffer, len) {
     const center = (len - 1) * 0.5
     for (let i = 0; i < len; i++) {
-      delay[i] = Math.round(Math.abs(i - center)) * wordFlapStagger
+      buffer[i] = Math.round(Math.abs(i - center)) * wordFlapStagger
     }
   }
 
@@ -162,39 +160,24 @@ export function createWordCycler() {
     const maxLen = Math.max(chars.length, nextChars.length)
     while (current.length < maxLen) current.push(0)
     current.length = maxLen
+    departCurrent.length = maxLen
     target.length  = maxLen
     next.length    = maxLen
     delay.length   = maxLen
+    departDelay.length = maxLen
 
     for (let i = 0; i < maxLen; i++) {
       target[i] = i < chars.length ? chars[i] : 0
       next[i]   = i < nextChars.length ? nextChars[i] : 0
+      departCurrent[i] = 0
     }
 
-    setCenterOutDelays(maxLen)
+    setCenterOutDelays(delay, maxLen)
+    setCenterOutDelays(departDelay, maxLen)
 
     targetLayout = buildLayout(target)
     nextLayout = buildLayout(next)
     phase = 'arrive'
-  }
-
-  function getDepartProgress() {
-    if (phase !== 'depart') return 1
-    if (target.length === 0) return 1
-
-    let progressSum = 0
-    for (let i = 0; i < target.length; i++) {
-      const totalDistance = charDistance(target[i], next[i])
-      if (totalDistance === 0) {
-        progressSum += 1
-        continue
-      }
-
-      const currentDistance = Math.min(totalDistance, charDistance(target[i], current[i]))
-      progressSum += currentDistance / totalDistance
-    }
-
-    return progressSum / target.length
   }
 
   function stepFlap() {
@@ -209,7 +192,11 @@ export function createWordCycler() {
       }
       if (allArrived) {
         phase = 'depart'
-        setCenterOutDelays(target.length)
+        for (let i = 0; i < target.length; i++) {
+          departCurrent[i] = target[i]
+        }
+        setCenterOutDelays(delay, target.length)
+        setCenterOutDelays(departDelay, target.length)
       }
     } else {
       let allDone = true
@@ -217,6 +204,13 @@ export function createWordCycler() {
         if (delay[i] > 0) { delay[i]--; allDone = false; continue }
         if (current[i] !== next[i]) {
           current[i] = (current[i] + 1) % ALPHABET.length
+          allDone = false
+        }
+      }
+      for (let i = 0; i < departCurrent.length; i++) {
+        if (departDelay[i] > 0) { departDelay[i]--; allDone = false; continue }
+        if (departCurrent[i] !== 0) {
+          departCurrent[i] = (departCurrent[i] + 1) % ALPHABET.length
           allDone = false
         }
       }
@@ -260,13 +254,14 @@ export function createWordCycler() {
     for (let i = 0; i < current.length; i++) {
       const ch = ALPHABET[current[i]]
       if (ch === ' ') continue
-      const pos = phase === 'depart' && delay[i] <= 0 ? nextLayout[i] : targetLayout[i]
+      if (phase === 'depart' && delay[i] > 0) continue
+      const pos = phase === 'depart' ? nextLayout[i] : targetLayout[i]
       ctx.fillText(ch, pos.x, pos.y)
     }
     finishTextRender(ctx)
 
     if (phase === 'depart') {
-      renderInto(departCtx, current, targetLayout)
+      renderInto(departCtx, departCurrent, targetLayout)
     } else {
       departCtx.clearRect(0, 0, W, H)
     }
@@ -279,7 +274,6 @@ export function createWordCycler() {
     return {
       canvas,
       departCanvas,
-      departProgress: getDepartProgress(),
     }
   }
 

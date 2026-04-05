@@ -7,7 +7,7 @@
 import {
   gridFontSize, fontFamily, gridDensityChars,
   backgroundFieldTimeScale, backgroundFieldAmplitude,
-  wordCanvasWidth, wordCanvasHeight, wordDepartFadeProgress,
+  wordCanvasWidth, wordCanvasHeight,
 } from './settings.js'
 import { chars } from './charset.js'
 
@@ -17,7 +17,6 @@ export const staticUniforms = {
   u_fieldTimeScale:   backgroundFieldTimeScale,
   u_fieldAmplitude:   backgroundFieldAmplitude,
   u_wordAspect:       wordCanvasHeight / wordCanvasWidth,
-  u_wordDepartFadeProgress: wordDepartFadeProgress,
   u_densityCharCount: gridDensityChars.length,
 }
 
@@ -48,9 +47,7 @@ uniform float     u_pointerDown;
 uniform sampler2D u_fluid;        // CPU fluid sim: R=density, G=vx, B=vy, A=speed
 uniform float     u_seed;          // random offset so each page load is unique
 uniform sampler2D u_wordTex;       // word bitmap (small canvas, scaled to fill screen)
-uniform sampler2D u_wordDepartTex; // outgoing word bitmap for dissolve transitions
-uniform float     u_wordDepartProgress;
-uniform float     u_wordDepartFadeProgress;
+uniform sampler2D u_wordDepartTex; // outgoing word bitmap for split-flap-to-space transitions
 uniform sampler2D u_overlayTex;    // per-cell overlay chars for hover details
 uniform float     u_fieldTimeScale;  // time → shader time multiplier
 uniform float     u_fieldAmplitude;  // background noise strength
@@ -198,10 +195,7 @@ void main() {
 
   float wordSample = texture2D(u_wordTex, clamp(wuv, 0.0, 1.0)).r;
   float departWordSample = texture2D(u_wordDepartTex, clamp(wuv, 0.0, 1.0)).r;
-  float departPhase = smoothstep(0.0, u_wordDepartFadeProgress, u_wordDepartProgress);
-  float departFade = 1.0 - departPhase;
-  departFade = smoothstep(0.0, 1.0, departFade);
-  float departWord = departWordSample * departFade;
+  float departWord = departWordSample;
 
   // Blend word shape into density
   d = mix(d, max(d, 0.9), departWord);

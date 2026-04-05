@@ -127,7 +127,7 @@ async function boot() {
 
     pointer.dx *= pointerDeltaDecay
     pointer.dy *= pointerDeltaDecay
-    renderer.draw(now, pointer, { wordDepartProgress: wordState.departProgress })
+    renderer.draw(now, pointer)
     rafId = requestAnimationFrame(frame)
   }
 
