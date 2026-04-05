@@ -1,4 +1,4 @@
-import { chars } from './settings.js'
+import { chars } from './charset.js'
 
 const OVERLAY_ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-'
 const OVERLAY_FRAME_SKIP = 1

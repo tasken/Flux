@@ -5,10 +5,11 @@
 // └─────────────────────────────────────────────────────────────────────────────┘
 
 import {
-  fontSize, fontFamily, chars, densityChars,
+  fontSize, fontFamily, densityChars,
   fieldTimeScale, fieldAmplitude,
   wordCanvasW, wordCanvasH,
 } from './settings.js'
+import { chars } from './charset.js'
 
 export const config = { fontSize, fontFamily, chars }
 

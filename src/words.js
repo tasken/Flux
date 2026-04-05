@@ -3,7 +3,7 @@
 // creating HUGE background letters made of smaller density characters.
 // Inspired by the ertdfgcvb.xyz departure-board + giant-letter effect.
 
-import { wordFlapStagger, wordFlapFrameSkip, wordCanvasW, wordCanvasH, wordFontSize, wordScaleY, fontFamily } from './settings.js'
+import { wordFlapStagger, wordFlapFrameSkip, wordCanvasW, wordCanvasH, wordFontSize, wordScaleY, wordLineHeight, fontFamily } from './settings.js'
 
 const LINES = [
   'WE LEFT ALL THE PAIN BEHIND',
@@ -90,7 +90,7 @@ export function createWordCycler() {
     const asc = metrics.fontBoundingBoxAscent ?? idealSize * 0.78
     const desc = metrics.fontBoundingBoxDescent ?? idealSize * 0.22
     const lineBox = asc + desc
-    const lineGap = 0
+    const lineAdvance = lineBox * wordLineHeight
 
     const str = charIndices
       .slice(0, lastVisible + 1)
@@ -99,10 +99,10 @@ export function createWordCycler() {
     const wrapIndex = findWrapIndex(str)
     const line1 = wrapIndex < 0 ? str : str.slice(0, wrapIndex).trimEnd()
     const line2 = wrapIndex < 0 ? '' : str.slice(wrapIndex).trimStart()
-    const totalHeight = line2 ? lineBox * 2 + lineGap : lineBox
+    const totalHeight = line2 ? lineAdvance + lineBox : lineBox
     const topY = (H - totalHeight) * 0.5
     const y1 = topY + asc
-    const y2 = line2 ? topY + lineBox + lineGap + asc : y1
+    const y2 = line2 ? topY + lineAdvance + asc : y1
     const startX1 = W * 0.5 - runWidth(line1) * 0.5
     const startX2 = W * 0.5 - runWidth(line2) * 0.5
 
@@ -201,13 +201,13 @@ export function createWordCycler() {
     ctx.clearRect(0, 0, W, H)
 
     const fontSize = idealSize
+    const scaleY = Math.max(0, Math.min(1, wordScaleY))
     ctx.font = `bold ${fontSize}px ${fontFamily}`
 
     ctx.save()
-    // Squash text vertically so giant background letters have a compressed,
-    // split-flap aesthetic.  wordScaleY < 1 = taller/narrower chars.
-    ctx.translate(0, H * 0.5 * (1 - wordScaleY))
-    ctx.scale(1, wordScaleY)
+    // 1 keeps the original glyph height; 0 pushes toward maximum compression.
+    ctx.translate(0, H * 0.5 * (1 - scaleY))
+    ctx.scale(1, Math.max(scaleY, 0.0001))
     ctx.textBaseline = 'alphabetic'
     ctx.textAlign    = 'left'
     ctx.fillStyle    = '#fff'
