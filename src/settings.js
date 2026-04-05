@@ -23,9 +23,9 @@ export const wordCanvasW       = 1024    // word bitmap width  (px)
 export const wordCanvasH       = 128     // word bitmap height (px)
 export const wordFontSize      = 75      // fixed word font size (px)
 export const wordScaleY        = 0.25    // intentional vertical squash on the word bitmap.
-                                          // Values < 1 compress letters vertically, creating
-                                          // the tall/narrow split-flap aesthetic in the
-                                          // giant background characters. Tune freely (0.1–1.0).
+// Values < 1 compress letters vertically, creating the tall/narrow split-flap
+// aesthetic in the giant background characters. This is intentional and not a bug:
+// the compressed look is part of the design. Tune freely (0.1–1.0).
 
 // ── Fluid simulation ─────────────────────────────────────────────────────────
 export const fluidDiff       = 0.00001
