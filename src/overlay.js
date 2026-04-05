@@ -1,6 +1,4 @@
-import { chars } from './charset.js'
-
-const OVERLAY_ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-'
+const OVERLAY_ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./-_'
 const OVERLAY_FRAME_SKIP = 1
 const OVERLAY_STAGGER = 1
 
@@ -24,7 +22,7 @@ function buildTargetGrid(lines, cols, rows) {
   return grid
 }
 
-export function createCharOverlay(lines) {
+export function createCharOverlay(lines, atlasChars) {
   let cols = 1
   let rows = 1
   let frameCount = 0
@@ -53,7 +51,7 @@ export function createCharOverlay(lines) {
       if (overlayIdx === 0) continue
 
       const ch = OVERLAY_ALPHABET[overlayIdx]
-      const atlasIdx = chars.indexOf(ch)
+      const atlasIdx = atlasChars.indexOf(ch)
       if (atlasIdx < 0) continue
 
       const p = i * 4

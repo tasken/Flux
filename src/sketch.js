@@ -55,7 +55,7 @@ uniform sampler2D u_overlayTex;    // per-cell overlay chars for hover details
 uniform float     u_fieldTimeScale;  // time → shader time multiplier
 uniform float     u_fieldAmplitude;  // background noise strength
 uniform float     u_wordAspect;      // wordCanvasH / wordCanvasW
-uniform float     u_densityCharCount; // number of chars in the density ramp
+uniform float     u_densityCharCount;
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
 // Perceptually uniform: equal L steps look equally bright regardless of hue.
@@ -207,7 +207,7 @@ void main() {
   d = mix(d, max(d, 0.9), departWord);
   d = mix(d, max(d, 0.9), wordSample);
 
-  // Map density → character index (using density chars)
+  // Map density → character index using the derived sparse → dense ramp.
   float charIdx = clamp(floor(d * u_densityCharCount), 0.0, u_densityCharCount - 1.0);
 
   vec4 overlay = texture2D(u_overlayTex, fluidUV);

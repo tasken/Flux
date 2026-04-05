@@ -25,6 +25,7 @@ function readGitMetadata(rootDir) {
     if (!head.startsWith('ref:')) {
       return {
         hash: head.slice(0, 10),
+        branch: '',
       }
     }
 
@@ -40,10 +41,12 @@ function readGitMetadata(rootDir) {
 
     return {
       hash: (hash || 'DEV').slice(0, 7),
+      branch: ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : '',
     }
   } catch {
     return {
       hash: 'DEV',
+      branch: '',
     }
   }
 }
@@ -60,12 +63,13 @@ function formatGmtMinus3(date) {
   return `${year}-${month}-${day}T${hours}:${minutes} ${meridiem} ART`
 }
 
-const { hash: commitHash } = readGitMetadata(process.cwd())
+const { hash: commitHash, branch: commitBranch } = readGitMetadata(process.cwd())
 const buildTime = formatGmtMinus3(new Date())
 
 export default defineConfig({
   define: {
     __COMMIT_HASH__: JSON.stringify(commitHash),
+    __COMMIT_BRANCH__: JSON.stringify(commitBranch),
     __BUILD_TIME__: JSON.stringify(buildTime),
   },
   server: {

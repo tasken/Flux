@@ -3,10 +3,15 @@ import { vertexSource, fragmentSource, config, staticUniforms } from './sketch.j
 import { createSimulation } from './simulation.js'
 import { createCharOverlay } from './overlay.js'
 import { createWordCycler } from './words.js'
+import { chars } from './charset.js'
 import { gridCellWidthUnits, gridCellHeightUnits, pointerMoveForce, pointerDownForce, pointerMoveDensity, pointerDownDensity, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
 
+const commitLine = __COMMIT_BRANCH__ && __COMMIT_BRANCH__ !== 'main'
+  ? `COMMIT ${__COMMIT_BRANCH__.toUpperCase()} ${__COMMIT_HASH__.toUpperCase()}`
+  : `COMMIT ${__COMMIT_HASH__.toUpperCase()}`
+
 const BUILD_DETAIL_LINES = [
-  `COMMIT ${__COMMIT_HASH__.toUpperCase()}`,
+  commitLine,
   `BUILT ${__BUILD_TIME__.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
 ]
 
@@ -57,7 +62,7 @@ async function boot() {
     ...config,
     staticUniforms,
   })
-  const overlay = createCharOverlay(BUILD_DETAIL_LINES)
+  const overlay = createCharOverlay(BUILD_DETAIL_LINES, chars)
   const wordCycler = createWordCycler()
 
   function showBuildDetails() {
