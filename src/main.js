@@ -15,6 +15,7 @@ const BUILD_DETAIL_LINES = [
   `BUILT ${__BUILD_TIME__.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
 ]
 
+
 function showBootError(message) {
   let panel = document.getElementById('boot-error')
   if (!panel) {
@@ -64,7 +65,6 @@ async function boot() {
   })
   const overlay = createCharOverlay(BUILD_DETAIL_LINES, chars)
   const wordCycler = createWordCycler()
-
   function showBuildDetails() {
     overlay.show()
   }
@@ -128,6 +128,7 @@ async function boot() {
     pointer.dx *= pointerDeltaDecay
     pointer.dy *= pointerDeltaDecay
     renderer.draw(now, pointer)
+
     rafId = requestAnimationFrame(frame)
   }
 
@@ -190,6 +191,7 @@ async function boot() {
     import.meta.hot.dispose(() => {
       cancelAnimationFrame(rafId)
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('keydown', handleKeydown)
       canvas.removeEventListener('pointermove', handlePointerMove)
       canvas.removeEventListener('pointerenter', handlePointerEnter)
       canvas.removeEventListener('pointerleave', handlePointerLeave)
