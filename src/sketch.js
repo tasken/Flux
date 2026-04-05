@@ -21,9 +21,6 @@ export const staticUniforms = {
   u_densityCharCount: gridDensityChars.length,
 }
 
-// Emit GLSL float literals — ensures e.g. 3 becomes "3.0" not "3"
-const g = (v) => Number(v).toFixed(4)
-
 // ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
 
 export const vertexSource = /* glsl */ `
