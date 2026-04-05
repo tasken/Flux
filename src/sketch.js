@@ -194,12 +194,13 @@ void main() {
   wuv.y += warpAmt * (procValue(wuv * 3.0 + 7.0, t * 0.5) * 0.15);
 
   float wordSample = texture2D(u_wordTex, clamp(wuv, 0.0, 1.0)).r;
-  float departWordSample = texture2D(u_wordDepartTex, clamp(wuv, 0.0, 1.0)).r;
+  float departWordSample = texture2D(u_wordDepartTex, clamp(wuv, 0.0, 1.0)).a;
   float departWord = departWordSample;
+  float wordColorInfluence = max(wordSample, departWord);
 
-  // Blend word shape into density
-  d = mix(d, max(d, 0.9), departWord);
-  d = mix(d, max(d, 0.9), wordSample);
+  // Blend word shape into density — use max so overlapping canvases don't double-boost edges
+  float wordBoost = max(wordSample, departWord);
+  d = mix(d, max(d, 0.9), wordBoost);
 
   // Map density → character index using the derived sparse → dense ramp.
   float charIdx = clamp(floor(d * u_densityCharCount), 0.0, u_densityCharCount - 1.0);
@@ -226,10 +227,13 @@ void main() {
   float warmHue   = 0.6 + sin(hueBase) * 0.5;
   float hueRad    = mix(coldHue, warmHue, pointerBurst);
 
+  float wordLift  = smoothstep(0.0, 0.85, wordColorInfluence);
   float chroma    = 0.18 + abs(bgVal) * 0.10 + fSpeed * 0.14
-                    + pointerGlow * 0.05 + pointerBurst * 0.06;
+                    + pointerGlow * 0.05 + pointerBurst * 0.06
+                    + wordLift * 0.04;
   float Lum       = min(d * 0.88 + fSpeed * 0.15
-                        + pointerGlow * 0.10 + pointerBurst * 0.14, 0.95);
+                        + pointerGlow * 0.10 + pointerBurst * 0.14
+                        + wordLift * 0.12, 0.95);
 
   vec3  rgb       = oklch2rgb(Lum, chroma, hueRad);
 
