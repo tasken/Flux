@@ -92,7 +92,6 @@ function createAtlas(gl, chars, fontSize, fontFamily, cellWidthUnits = 1, cellHe
   // Use real font metrics for accurate cell height (with fallback)
   const mRef    = tctx.measureText('Mg|')
   const ascent  = Math.ceil(mRef.fontBoundingBoxAscent  ?? fontSize * 0.85)
-  const descent = Math.ceil(mRef.fontBoundingBoxDescent ?? fontSize * 0.35)
   const safeCellWidthUnits = Math.max(1, cellWidthUnits)
   const safeCellHeightUnits = Math.max(1, cellHeightUnits)
   const charHeight = Math.max(1, Math.ceil(charWidth * safeCellHeightUnits / safeCellWidthUnits))
