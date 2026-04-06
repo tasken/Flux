@@ -134,7 +134,7 @@ export function createRenderer(canvas, opts) {
   let staticUniforms = opts.staticUniforms || {}
   if (!chars?.length) throw new Error('Renderer requires at least one character')
 
-  const gl = canvas.getContext('webgl', { antialias: false, alpha: false })
+  const gl = canvas.getContext('webgl2', { antialias: false, alpha: false })
   if (!gl) throw new Error('WebGL not available')
 
   let program = link(
