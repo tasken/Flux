@@ -120,8 +120,10 @@ async function boot() {
 
     // Update word bitmap each frame (cheap: small canvas + texture upload)
     const wordState = wordCycler.update()
-    renderer.uploadWordTexture(wordState.canvas)
-    renderer.uploadDepartWordTexture(wordState.departCanvas)
+    if (wordState.changed) {
+      renderer.uploadWordTexture(wordState.canvas)
+      renderer.uploadDepartWordTexture(wordState.departCanvas)
+    }
     const overlayState = overlay.update()
     renderer.uploadOverlay(overlayState.pixels, overlayState.cols, overlayState.rows)
 

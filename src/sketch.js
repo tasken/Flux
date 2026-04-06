@@ -23,7 +23,8 @@ export const staticUniforms = {
 // ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
 
 export const vertexSource = /* glsl */ `
-attribute vec2 a_position;
+#version 300 es
+in vec2 a_position;
 void main() {
   gl_Position = vec4(a_position, 0.0, 1.0);
 }
@@ -32,6 +33,7 @@ void main() {
 // ── fragment shader (all the art happens here) ────────────────────────────────
 
 export const fragmentSource = /* glsl */ `
+#version 300 es
 precision highp float;
 
 uniform float     u_time;       // milliseconds since page load
@@ -53,6 +55,8 @@ uniform float     u_fieldTimeScale;  // time → shader time multiplier
 uniform float     u_fieldAmplitude;  // background noise strength
 uniform float     u_wordAspect;      // wordCanvasH / wordCanvasW
 uniform float     u_densityCharCount;
+
+out vec4 fragColor;
 
 // ── OKLab / OKLch → linear RGB ────────────────────────────────────────────────
 // Perceptually uniform: equal L steps look equally bright regardless of hue.
@@ -145,11 +149,11 @@ void main() {
 
   // ── Sample CPU fluid simulation texture ──
   vec2 fluidUV = (cell + 0.5) / u_gridSize;
-  vec4 fluid   = texture2D(u_fluid, fluidUV);
-  float fDensity = fluid.r;                      // [0, 1]
-  float fVx      = fluid.g * 2.0 - 1.0;          // [-1, 1]
-  float fVy      = fluid.b * 2.0 - 1.0;          // [-1, 1]
-  float fSpeed   = fluid.a;                       // [0, 1]
+  vec4 fluid   = texture(u_fluid, fluidUV);
+  float fDensity = fluid.r;
+  float fVx      = fluid.g;
+  float fVy      = fluid.b;
+  float fSpeed   = fluid.a;
 
   // ── Procedural background (gentle ambient motion) ──
   float t     = u_time * u_fieldTimeScale + u_seed;
@@ -193,8 +197,8 @@ void main() {
   wuv.x += warpAmt * (procValue(wuv * 3.0, t * 0.5) * 0.15);
   wuv.y += warpAmt * (procValue(wuv * 3.0 + 7.0, t * 0.5) * 0.15);
 
-  float wordSample = texture2D(u_wordTex, clamp(wuv, 0.0, 1.0)).r;
-  float departWordSample = texture2D(u_wordDepartTex, clamp(wuv, 0.0, 1.0)).a;
+  float wordSample = texture(u_wordTex, clamp(wuv, 0.0, 1.0)).r;
+  float departWordSample = texture(u_wordDepartTex, clamp(wuv, 0.0, 1.0)).a;
   float departWord = departWordSample;
   float wordColorInfluence = max(wordSample, departWord);
 
@@ -205,7 +209,7 @@ void main() {
   // Map density → character index using the derived sparse → dense ramp.
   float charIdx = clamp(floor(d * u_densityCharCount), 0.0, u_densityCharCount - 1.0);
 
-  vec4 overlay = texture2D(u_overlayTex, fluidUV);
+  vec4 overlay = texture(u_overlayTex, fluidUV);
   if (overlay.a > 0.0) {
     charIdx = floor(overlay.r * 255.0 + 0.5);
     d = max(d, 0.82);
@@ -214,7 +218,7 @@ void main() {
   // Local UV within this cell → sample the font atlas
   vec2 localUV = fract(fc / u_cellSize);
   vec2 atlasUV = vec2((charIdx + localUV.x) / u_charCount, localUV.y);
-  float alpha  = texture2D(u_atlas, atlasUV).a;
+  float alpha  = texture(u_atlas, atlasUV).a;
 
   // ── Color: OKLch driven by fluid velocity + density ──
   // Cold palette: hue locked to blue → cyan → purple range (~3.4 – 5.2 rad)
@@ -237,6 +241,6 @@ void main() {
 
   vec3  rgb       = oklch2rgb(Lum, chroma, hueRad);
 
-  gl_FragColor = vec4(rgb * alpha, 1.0);
+  fragColor = vec4(rgb * alpha, 1.0);
 }
 `

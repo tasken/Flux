@@ -280,12 +280,20 @@ export function createWordCycler() {
 
   /** Call once per frame. Returns canvases + transition state for GPU upload. */
   function update() {
-    if (frameCount++ % wordFlapFrameSkip === 0) stepFlap()
-    render()
+    let changed = false
+    if (frameCount++ % wordFlapFrameSkip === 0) {
+      stepFlap()
+      changed = true
+    }
+    // Only re-render if we actually stepped the animation or if we are actively fading
+    if (changed || phase === 'arrive+depart') {
+      render()
+    }
     return {
       canvas,
       departCanvas,
       hasDeparting: departOpacity > 0,
+      changed: changed || phase === 'arrive+depart'
     }
   }
 

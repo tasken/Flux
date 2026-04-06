@@ -25,8 +25,8 @@ export function createSimulation(cols, rows) {
   const p           = new Float32Array(N)
   const div         = new Float32Array(N)
 
-  // RGBA texture data: R = density, G = vx (biased), B = vy (biased), A = speed
-  const pixels = new Uint8Array(N * 4)
+  // Float32 texture data: R = density, G = vx, B = vy, A = speed
+  const pixels = new Float32Array(N * 4)
 
   let currentCols = cols
   let currentRows = rows
@@ -68,7 +68,7 @@ export function createSimulation(cols, rows) {
 
     currentCols = newCols
     currentRows = newRows
-    state.pixels = new Uint8Array(newN * 4)
+    state.pixels = new Float32Array(newN * 4)
   }
 
   function injectForce(nx, ny, forceX, forceY, densityAmt, radius) {
@@ -164,22 +164,22 @@ export function createSimulation(cols, rows) {
       state.densityPrev[i] = 0
     }
 
-    // Pack into RGBA pixels for GPU upload
-    // R = density [0,1] → [0,255]
-    // G = vx [-1,1] → [0,255] (128 = zero)
-    // B = vy [-1,1] → [0,255] (128 = zero)
-    // A = speed [0,1] → [0,255]
+    // Pack into Float32Array for GPU upload
+    // R = density
+    // G = vx
+    // B = vy
+    // A = speed
     const px = state.pixels
     for (let i = 0; i < N; i++) {
-      const d = Math.min(1, Math.max(0, state.density[i]))
-      const svx = Math.min(1, Math.max(-1, state.vx[i]))
-      const svy = Math.min(1, Math.max(-1, state.vy[i]))
-      const speed = Math.min(1, Math.sqrt(svx * svx + svy * svy))
+      const d = state.density[i]
+      const svx = state.vx[i]
+      const svy = state.vy[i]
+      const speed = Math.sqrt(svx * svx + svy * svy)
       const off = i * 4
-      px[off]     = (d * 255) | 0
-      px[off + 1] = ((svx * 0.5 + 0.5) * 255) | 0
-      px[off + 2] = ((svy * 0.5 + 0.5) * 255) | 0
-      px[off + 3] = (speed * 255) | 0
+      px[off]     = d
+      px[off + 1] = svx
+      px[off + 2] = svy
+      px[off + 3] = speed
     }
   }
 

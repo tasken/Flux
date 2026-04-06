@@ -169,13 +169,15 @@ export function createRenderer(canvas, opts) {
     gl.uniform1f(u.u_charCount, chars.length)
   }
 
-  // Fluid data texture (RGBA, one texel per grid cell)
+  // Fluid data texture (RGBA32F, one texel per grid cell)
   let fluidTex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, fluidTex)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  // Pre-allocate empty texture — we will use texSubImage2D to update it
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null)
 
   function bindFluid() {
     gl.useProgram(program)
@@ -191,6 +193,8 @@ export function createRenderer(canvas, opts) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  // Pre-allocate to allow texSubImage2D updates
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
 
   function bindWord() {
     gl.useProgram(program)
@@ -205,6 +209,8 @@ export function createRenderer(canvas, opts) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+  // Pre-allocate to allow texSubImage2D updates
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
 
   function bindWordDepart() {
     gl.useProgram(program)
@@ -239,6 +245,9 @@ export function createRenderer(canvas, opts) {
   gl.uniform1f(u.u_seed, seed)
   applyStaticUniforms()
 
+  let fluidCols = 1
+  let fluidRows = 1
+
   return {
     resize() {
       const nextDpr = window.devicePixelRatio || 1
@@ -255,6 +264,14 @@ export function createRenderer(canvas, opts) {
 
       const cols = Math.max(1, Math.floor(canvas.width  / atlas.charWidth))
       const rows = Math.max(1, Math.floor(canvas.height / atlas.charHeight))
+
+      // Reallocate fluid texture if size changed
+      if (cols !== fluidCols || rows !== fluidRows) {
+        fluidCols = cols
+        fluidRows = rows
+        gl.bindTexture(gl.TEXTURE_2D, fluidTex)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, fluidCols, fluidRows, 0, gl.RGBA, gl.FLOAT, null)
+      }
 
       gl.useProgram(program)
       gl.uniform2f(u.u_resolution, canvas.width, canvas.height)
@@ -311,19 +328,24 @@ export function createRenderer(canvas, opts) {
     uploadFluid(pixels, cols, rows) {
       gl.activeTexture(gl.TEXTURE1)
       gl.bindTexture(gl.TEXTURE_2D, fluidTex)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+      // Use texSubImage2D instead of texImage2D to avoid GPU reallocation
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, cols, rows, gl.RGBA, gl.FLOAT, pixels)
     },
 
     uploadWordTexture(canvas) {
       gl.activeTexture(gl.TEXTURE2)
       gl.bindTexture(gl.TEXTURE_2D, wordTex)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+      if (canvas.width > 0 && canvas.height > 0) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+      }
     },
 
     uploadDepartWordTexture(canvas) {
       gl.activeTexture(gl.TEXTURE3)
       gl.bindTexture(gl.TEXTURE_2D, wordDepartTex)
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+      if (canvas.width > 0 && canvas.height > 0) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, canvas)
+      }
     },
 
     uploadOverlay(pixels, cols, rows) {
