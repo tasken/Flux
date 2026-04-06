@@ -40,6 +40,7 @@ export function createWordCycler() {
 
   let targetLayout = []
   let nextLayout = []
+  let currentCharsLen = 0
 
   const canvas = document.createElement('canvas')
   canvas.width  = W
@@ -157,23 +158,48 @@ export function createWordCycler() {
     const chars     = getLineChars(wordIndex)
     const nextChars = getLineChars(wordIndex + 1)
     wordIndex++
+    currentCharsLen = chars.length
 
-    const maxLen = Math.max(chars.length, nextChars.length)
-    while (current.length < maxLen) current.push(0)
+    const maxLen = chars.length + nextChars.length
     current.length = maxLen
     target.length  = maxLen
     next.length    = maxLen
     delay.length   = maxLen
 
     for (let i = 0; i < maxLen; i++) {
-      target[i] = i < chars.length ? chars[i] : 0
-      next[i]   = i < nextChars.length ? nextChars[i] : 0
+      if (i < chars.length) {
+        current[i] = chars[i]
+        target[i]  = chars[i]
+        next[i]    = 0
+      } else {
+        current[i] = 0
+        target[i]  = 0
+        next[i]    = nextChars[i - chars.length]
+      }
     }
 
-    setCenterOutDelays(delay, maxLen)
+    const visualMaxLen = Math.max(chars.length, nextChars.length)
+    const visualCenter = (visualMaxLen - 1) * 0.5
+    for (let i = 0; i < maxLen; i++) {
+      const visualIndex = i < chars.length ? i : i - chars.length
+      delay[i] = Math.round(Math.abs(visualIndex - visualCenter)) * wordFlapStagger
+    }
 
-    targetLayout = buildLayout(target)
-    nextLayout = buildLayout(next)
+    const layout1 = buildLayout(chars)
+    const layout2 = buildLayout(nextChars)
+    
+    targetLayout = new Array(maxLen)
+    nextLayout = new Array(maxLen)
+    for (let i = 0; i < maxLen; i++) {
+      if (i < chars.length) {
+        targetLayout[i] = layout1[i]
+        nextLayout[i]   = layout1[i]
+      } else {
+        targetLayout[i] = layout2[i - chars.length]
+        nextLayout[i]   = layout2[i - chars.length]
+      }
+    }
+
     phase = 'arrive'
     departOpacity = 0
   }
@@ -198,7 +224,13 @@ export function createWordCycler() {
         departOpacity = 1.0
         departSnapshot = [...target]
         departSnapshotLayout = targetLayout
-        setCenterOutDelays(delay, target.length)
+        
+        const visualMaxLen = Math.max(currentCharsLen, target.length - currentCharsLen)
+        const visualCenter = (visualMaxLen - 1) * 0.5
+        for (let i = 0; i < target.length; i++) {
+          const visualIndex = i < currentCharsLen ? i : i - currentCharsLen
+          delay[i] = Math.round(Math.abs(visualIndex - visualCenter)) * wordFlapStagger
+        }
       }
     } else {
       let allDone = true
@@ -237,9 +269,12 @@ export function createWordCycler() {
     ctx.clearRect(0, 0, W, H)
     prepareTextRender(ctx)
     for (let i = 0; i < current.length; i++) {
+      // During 'depart', the old line is entirely handed off to departCtx.
+      if (phase === 'depart' && i < currentCharsLen) continue
+
       const ch = ALPHABET[current[i]]
       if (ch === ' ') continue
-      const pos = (phase === 'depart' && current[i] !== target[i]) ? nextLayout[i] : targetLayout[i]
+      const pos = targetLayout[i]
       ctx.fillText(ch, pos.x, pos.y)
     }
     finishTextRender(ctx)
@@ -249,12 +284,9 @@ export function createWordCycler() {
     if (departOpacity > 0) {
       prepareTextRender(departCtx)
       departCtx.globalAlpha = departOpacity
-      for (let i = 0; i < departSnapshot.length; i++) {
-        const ch = ALPHABET[departSnapshot[i]]
+      for (let i = 0; i < currentCharsLen; i++) {
+        const ch = ALPHABET[current[i]]
         if (ch === ' ') continue
-        // Once this slot starts cycling toward the new line, the main canvas
-        // takes over at nextLayout — stop reinforcing the old position.
-        if (phase === 'depart' && i < current.length && current[i] !== target[i]) continue
         departCtx.fillText(ch, departSnapshotLayout[i].x, departSnapshotLayout[i].y)
       }
       finishTextRender(departCtx)
