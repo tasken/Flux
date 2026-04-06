@@ -26,16 +26,17 @@ const MAX_LINE_CHARS = 23
 const W = wordCanvasWidth, H = wordCanvasHeight
 
 export function createWordCycler() {
-  let wordIndex  = 0
-  let frameCount = 0
-  let phase      = 'arrive'
+  let wordIndex     = 0
+  let frameCount    = 0
+  let phase         = 'arrive'
+  let departOpacity      = 0
+  let departSnapshot     = []   // copy of target[] at moment depart begins
+  let departSnapshotLayout = [] // corresponding layout (stable reference)
 
   const current = []
-  const departCurrent = []
   const target  = []
   const next    = []
   const delay   = []
-  const departDelay = []
 
   let targetLayout = []
   let nextLayout = []
@@ -160,43 +161,44 @@ export function createWordCycler() {
     const maxLen = Math.max(chars.length, nextChars.length)
     while (current.length < maxLen) current.push(0)
     current.length = maxLen
-    departCurrent.length = maxLen
     target.length  = maxLen
     next.length    = maxLen
     delay.length   = maxLen
-    departDelay.length = maxLen
 
     for (let i = 0; i < maxLen; i++) {
       target[i] = i < chars.length ? chars[i] : 0
       next[i]   = i < nextChars.length ? nextChars[i] : 0
-      departCurrent[i] = 0
     }
 
     setCenterOutDelays(delay, maxLen)
-    setCenterOutDelays(departDelay, maxLen)
 
     targetLayout = buildLayout(target)
     nextLayout = buildLayout(next)
     phase = 'arrive'
+    departOpacity = 0
   }
+
 
   function stepFlap() {
     if (phase === 'arrive') {
       let allArrived = true
       for (let i = 0; i < target.length; i++) {
-        if (delay[i] > 0) { delay[i]--; allArrived = false; continue }
+        if (delay[i] > 0) { 
+          delay[i]--; 
+          allArrived = false; 
+          continue; 
+        }
         if (current[i] !== target[i]) {
-          current[i] = (current[i] + 1) % ALPHABET.length
-          allArrived = false
+          current[i] = (current[i] + 1) % ALPHABET.length;
+          allArrived = false;
         }
       }
       if (allArrived) {
         phase = 'depart'
-        for (let i = 0; i < target.length; i++) {
-          departCurrent[i] = target[i]
-        }
+        departOpacity = 1.0
+        departSnapshot = [...target]
+        departSnapshotLayout = targetLayout
         setCenterOutDelays(delay, target.length)
-        setCenterOutDelays(departDelay, target.length)
       }
     } else {
       let allDone = true
@@ -207,16 +209,11 @@ export function createWordCycler() {
           allDone = false
         }
       }
-      for (let i = 0; i < departCurrent.length; i++) {
-        if (departDelay[i] > 0) { departDelay[i]--; allDone = false; continue }
-        if (departCurrent[i] !== 0) {
-          departCurrent[i] = (departCurrent[i] + 1) % ALPHABET.length
-          allDone = false
-        }
-      }
       if (allDone) loadLine()
     }
   }
+
+
 
   function prepareTextRender(renderCtx) {
     const fontSize = idealSize
@@ -236,34 +233,32 @@ export function createWordCycler() {
     renderCtx.restore()
   }
 
-  function renderInto(renderCtx, charsToDraw, layout) {
-    renderCtx.clearRect(0, 0, W, H)
-    prepareTextRender(renderCtx)
-    for (let i = 0; i < charsToDraw.length; i++) {
-      const ch = ALPHABET[charsToDraw[i]]
-      if (ch === ' ') continue
-      const pos = layout[i]
-      renderCtx.fillText(ch, pos.x, pos.y)
-    }
-    finishTextRender(renderCtx)
-  }
-
   function render() {
     ctx.clearRect(0, 0, W, H)
     prepareTextRender(ctx)
     for (let i = 0; i < current.length; i++) {
       const ch = ALPHABET[current[i]]
       if (ch === ' ') continue
-      if (phase === 'depart' && delay[i] > 0) continue
-      const pos = phase === 'depart' ? nextLayout[i] : targetLayout[i]
+      const pos = (phase === 'depart' && current[i] !== target[i]) ? nextLayout[i] : targetLayout[i]
       ctx.fillText(ch, pos.x, pos.y)
     }
     finishTextRender(ctx)
 
-    if (phase === 'depart') {
-      renderInto(departCtx, departCurrent, targetLayout)
-    } else {
-      departCtx.clearRect(0, 0, W, H)
+    // Depart canvas fades out the old word — shader reads .a, so globalAlpha works correctly
+    departCtx.clearRect(0, 0, W, H)
+    if (departOpacity > 0) {
+      prepareTextRender(departCtx)
+      departCtx.globalAlpha = departOpacity
+      for (let i = 0; i < departSnapshot.length; i++) {
+        const ch = ALPHABET[departSnapshot[i]]
+        if (ch === ' ') continue
+        // Once this slot starts cycling toward the new line, the main canvas
+        // takes over at nextLayout — stop reinforcing the old position.
+        if (phase === 'depart' && i < current.length && current[i] !== target[i]) continue
+        departCtx.fillText(ch, departSnapshotLayout[i].x, departSnapshotLayout[i].y)
+      }
+      finishTextRender(departCtx)
+      departOpacity = Math.max(0, departOpacity - 0.008)
     }
   }
 
@@ -274,6 +269,7 @@ export function createWordCycler() {
     return {
       canvas,
       departCanvas,
+      hasDeparting: departOpacity > 0,
     }
   }
 
