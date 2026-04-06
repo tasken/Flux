@@ -2,8 +2,15 @@
 // The GPU shader samples this bitmap scaled to fill the entire screen,
 // creating HUGE background letters made of smaller density characters.
 // Inspired by the ertdfgcvb.xyz departure-board + giant-letter effect.
+//
+// Lifecycle per line:
+//   arrive  → flap from space to target chars (center-out stagger)
+//   hold    → line stays fully rendered for HOLD_STEPS flap ticks
+//   transition → snapshot old line to departCtx (fades out),
+//                load next line, new arrive starts simultaneously.
+//                Depart fade completes in ~1/3 the arrive duration.
 
-import { wordFlapStagger, wordFlapFrameSkip, wordCanvasWidth, wordCanvasHeight, wordFontSize, wordGlyphScaleY, wordGlyphLineHeight, fontFamily } from './settings.js'
+import { wordFlapStagger, wordFlapFrameSkip, wordCanvasWidth, wordCanvasHeight, wordFontSize, wordGlyphScaleY, wordGlyphLineHeight, wordHoldSteps, wordDepartFadeRatio, wordMaxLineChars, fontFamily } from './settings.js'
 
 const LINES = [
   'WE LEFT ALL THE PAIN BEHIND',
@@ -21,26 +28,30 @@ const LINES = [
 ]
 
 const ALPHABET = ' ABCDEFGHIJKLMNOPQRSTUVWXYZ.,!?\'"0123456789-'
-const MAX_LINE_CHARS = 23
+
 
 const W = wordCanvasWidth, H = wordCanvasHeight
 
 export function createWordCycler() {
   let wordIndex     = 0
   let frameCount    = 0
-  let phase         = 'arrive'
-  let departOpacity      = 0
-  let departSnapshot     = []   // copy of target[] at moment depart begins
-  let departSnapshotLayout = [] // corresponding layout (stable reference)
+  let phase         = 'arrive'   // 'arrive' | 'hold' | 'arrive+depart'
+  let holdCounter   = 0
+
+  // Depart state — lives independently so it persists across loadLine().
+  let departOpacity        = 0
+  let departFadeRate       = 0
+  let departSnapshot       = []
+  let departSnapshotLayout = []
+  let departCharsLen       = 0
 
   const current = []
   const target  = []
-  const next    = []
   const delay   = []
 
   let targetLayout = []
-  let nextLayout = []
   let currentCharsLen = 0
+  let lastArriveSteps = 0   // track how long arrive took, for depart fade calc
 
   const canvas = document.createElement('canvas')
   canvas.width  = W
@@ -66,7 +77,7 @@ export function createWordCycler() {
   }
 
   function findWrapIndex(str) {
-    if (str.length <= MAX_LINE_CHARS) return -1
+    if (str.length <= wordMaxLineChars) return -1
 
     const mid = Math.floor(str.length * 0.5)
     let best = -1
@@ -84,8 +95,6 @@ export function createWordCycler() {
     return best >= 0 ? best : mid
   }
 
-  // Build per-slot positions from real font metrics so old and new lines
-  // can coexist during a transition without moving each other.
   function buildLayout(charIndices) {
     let lastVisible = -1
     for (let i = charIndices.length - 1; i >= 0; i--) {
@@ -139,13 +148,6 @@ export function createWordCycler() {
     return layout
   }
 
-  function setCenterOutDelays(buffer, len) {
-    const center = (len - 1) * 0.5
-    for (let i = 0; i < len; i++) {
-      buffer[i] = Math.round(Math.abs(i - center)) * wordFlapStagger
-    }
-  }
-
   function getLineChars(idx) {
     const word = LINES[idx % LINES.length].toUpperCase()
     return Array.from(word, ch => {
@@ -154,98 +156,83 @@ export function createWordCycler() {
     })
   }
 
+  /** Estimate how many flap steps an arrive will take for a given line. */
+  function estimateArriveSteps(chars) {
+    const center = (chars.length - 1) * 0.5
+    let maxSteps = 0
+    for (let i = 0; i < chars.length; i++) {
+      if (chars[i] === 0) continue  // space — no flapping
+      const staggerDelay = Math.round(Math.abs(i - center)) * wordFlapStagger
+      const cycles = chars[i]  // flap steps from 0 to target index
+      maxSteps = Math.max(maxSteps, staggerDelay + cycles)
+    }
+    return maxSteps
+  }
+
   function loadLine() {
-    const chars     = getLineChars(wordIndex)
-    const nextChars = getLineChars(wordIndex + 1)
+    const chars = getLineChars(wordIndex)
     wordIndex++
     currentCharsLen = chars.length
 
-    const maxLen = chars.length + nextChars.length
-    current.length = maxLen
-    target.length  = maxLen
-    next.length    = maxLen
-    delay.length   = maxLen
+    current.length = chars.length
+    target.length  = chars.length
+    delay.length   = chars.length
 
-    for (let i = 0; i < maxLen; i++) {
-      if (i < chars.length) {
-        current[i] = chars[i]
-        target[i]  = chars[i]
-        next[i]    = 0
-      } else {
-        current[i] = 0
-        target[i]  = 0
-        next[i]    = nextChars[i - chars.length]
-      }
+    const center = (chars.length - 1) * 0.5
+    for (let i = 0; i < chars.length; i++) {
+      current[i] = 0
+      target[i]  = chars[i]
+      delay[i]   = Math.round(Math.abs(i - center)) * wordFlapStagger
     }
 
-    const visualMaxLen = Math.max(chars.length, nextChars.length)
-    const visualCenter = (visualMaxLen - 1) * 0.5
-    for (let i = 0; i < maxLen; i++) {
-      const visualIndex = i < chars.length ? i : i - chars.length
-      delay[i] = Math.round(Math.abs(visualIndex - visualCenter)) * wordFlapStagger
-    }
-
-    const layout1 = buildLayout(chars)
-    const layout2 = buildLayout(nextChars)
-    
-    targetLayout = new Array(maxLen)
-    nextLayout = new Array(maxLen)
-    for (let i = 0; i < maxLen; i++) {
-      if (i < chars.length) {
-        targetLayout[i] = layout1[i]
-        nextLayout[i]   = layout1[i]
-      } else {
-        targetLayout[i] = layout2[i - chars.length]
-        nextLayout[i]   = layout2[i - chars.length]
-      }
-    }
-
-    phase = 'arrive'
-    departOpacity = 0
+    targetLayout = buildLayout(chars)
+    lastArriveSteps = estimateArriveSteps(chars)
   }
 
+  /** Snapshot current line to departCtx and start fade. */
+  function startDepart() {
+    departOpacity = 1.0
+    departSnapshot = [...target]
+    departSnapshotLayout = targetLayout
+    departCharsLen = currentCharsLen
+
+    // Fade out in ~1/3 of the next arrive duration.
+    // Convert flap steps to frames (accounting for wordFlapFrameSkip).
+    const nextChars = getLineChars(wordIndex)
+    const nextArriveSteps = estimateArriveSteps(nextChars)
+    const nextArriveFrames = Math.max(1, nextArriveSteps * wordFlapFrameSkip)
+    const departFrames = Math.max(1, Math.round(nextArriveFrames * wordDepartFadeRatio))
+    departFadeRate = 1.0 / departFrames
+  }
 
   function stepFlap() {
-    if (phase === 'arrive') {
+    if (phase === 'arrive' || phase === 'arrive+depart') {
       let allArrived = true
-      for (let i = 0; i < target.length; i++) {
-        if (delay[i] > 0) { 
-          delay[i]--; 
-          allArrived = false; 
-          continue; 
+      for (let i = 0; i < currentCharsLen; i++) {
+        if (current[i] === target[i]) continue
+        if (delay[i] > 0) {
+          delay[i]--
+          allArrived = false
+          continue
         }
-        if (current[i] !== target[i]) {
-          current[i] = (current[i] + 1) % ALPHABET.length;
-          allArrived = false;
-        }
+        current[i] = (current[i] + 1) % ALPHABET.length
+        allArrived = false
       }
       if (allArrived) {
-        phase = 'depart'
-        departOpacity = 1.0
-        departSnapshot = [...target]
-        departSnapshotLayout = targetLayout
-        
-        const visualMaxLen = Math.max(currentCharsLen, target.length - currentCharsLen)
-        const visualCenter = (visualMaxLen - 1) * 0.5
-        for (let i = 0; i < target.length; i++) {
-          const visualIndex = i < currentCharsLen ? i : i - currentCharsLen
-          delay[i] = Math.round(Math.abs(visualIndex - visualCenter)) * wordFlapStagger
-        }
+        // Line fully rendered — enter hold.
+        phase = 'hold'
+        holdCounter = wordHoldSteps
       }
-    } else {
-      let allDone = true
-      for (let i = 0; i < target.length; i++) {
-        if (delay[i] > 0) { delay[i]--; allDone = false; continue }
-        if (current[i] !== next[i]) {
-          current[i] = (current[i] + 1) % ALPHABET.length
-          allDone = false
-        }
+    } else if (phase === 'hold') {
+      holdCounter--
+      if (holdCounter <= 0) {
+        // Hold done — snapshot old line, load next, arrive+depart simultaneously.
+        startDepart()
+        loadLine()
+        phase = 'arrive+depart'
       }
-      if (allDone) loadLine()
     }
   }
-
-
 
   function prepareTextRender(renderCtx) {
     const fontSize = idealSize
@@ -253,7 +240,6 @@ export function createWordCycler() {
     renderCtx.font = `bold ${fontSize}px ${fontFamily}`
 
     renderCtx.save()
-    // 1 keeps the original glyph height; 0 pushes toward maximum compression.
     renderCtx.translate(0, H * 0.5 * (1 - scaleY))
     renderCtx.scale(1, Math.max(scaleY, 0.0001))
     renderCtx.textBaseline = 'alphabetic'
@@ -266,12 +252,10 @@ export function createWordCycler() {
   }
 
   function render() {
+    // Main canvas: current line (arriving or fully rendered).
     ctx.clearRect(0, 0, W, H)
     prepareTextRender(ctx)
-    for (let i = 0; i < current.length; i++) {
-      // During 'depart', the old line is entirely handed off to departCtx.
-      if (phase === 'depart' && i < currentCharsLen) continue
-
+    for (let i = 0; i < currentCharsLen; i++) {
       const ch = ALPHABET[current[i]]
       if (ch === ' ') continue
       const pos = targetLayout[i]
@@ -279,18 +263,18 @@ export function createWordCycler() {
     }
     finishTextRender(ctx)
 
-    // Depart canvas fades out the old word — shader reads .a, so globalAlpha works correctly
+    // Depart canvas: old line fading out (independent of main lifecycle).
     departCtx.clearRect(0, 0, W, H)
     if (departOpacity > 0) {
       prepareTextRender(departCtx)
       departCtx.globalAlpha = departOpacity
-      for (let i = 0; i < currentCharsLen; i++) {
-        const ch = ALPHABET[current[i]]
+      for (let i = 0; i < departCharsLen; i++) {
+        const ch = ALPHABET[departSnapshot[i]]
         if (ch === ' ') continue
         departCtx.fillText(ch, departSnapshotLayout[i].x, departSnapshotLayout[i].y)
       }
       finishTextRender(departCtx)
-      departOpacity = Math.max(0, departOpacity - 0.008)
+      departOpacity = Math.max(0, departOpacity - departFadeRate)
     }
   }
 
@@ -305,8 +289,8 @@ export function createWordCycler() {
     }
   }
 
+  // Start blank — first line animates in from nothing.
   loadLine()
-  render()
 
   return { update, canvas, departCanvas }
 }
