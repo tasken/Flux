@@ -191,7 +191,7 @@ async function boot() {
     import.meta.hot.dispose(() => {
       cancelAnimationFrame(rafId)
       window.removeEventListener('resize', handleResize)
-      window.removeEventListener('keydown', handleKeydown)
+
       canvas.removeEventListener('pointermove', handlePointerMove)
       canvas.removeEventListener('pointerenter', handlePointerEnter)
       canvas.removeEventListener('pointerleave', handlePointerLeave)
