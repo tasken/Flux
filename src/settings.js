@@ -26,6 +26,9 @@ export const wordGlyphLineHeight = 0.75
 // ── Giant Background Words: Animation ───────────────────────────────────────
 export const wordFlapStagger = 6
 export const wordFlapFrameSkip = 2
+export const wordHoldSteps = 90          // flap ticks the line stays fully visible before transitioning
+export const wordDepartFadeRatio = 1 / 3 // depart fade duration as fraction of next arrive duration
+export const wordMaxLineChars = 23       // char threshold before line wraps to two rows
 
 // ── Fluid Simulation ─────────────────────────────────────────────────────────
 export const fluidDiffusion = 0.00001
