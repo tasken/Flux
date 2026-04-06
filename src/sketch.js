@@ -22,8 +22,7 @@ export const staticUniforms = {
 
 // ── vertex shader (trivial fullscreen quad) ───────────────────────────────────
 
-export const vertexSource = /* glsl */ `
-#version 300 es
+export const vertexSource = /* glsl */ `#version 300 es
 in vec2 a_position;
 void main() {
   gl_Position = vec4(a_position, 0.0, 1.0);
@@ -32,8 +31,7 @@ void main() {
 
 // ── fragment shader (all the art happens here) ────────────────────────────────
 
-export const fragmentSource = /* glsl */ `
-#version 300 es
+export const fragmentSource = /* glsl */ `#version 300 es
 precision highp float;
 
 uniform float     u_time;       // milliseconds since page load
@@ -139,7 +137,7 @@ void main() {
 
   // Fragments outside the character grid → black
   if (cell.x >= u_gridSize.x || cell.y >= u_gridSize.y) {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    fragColor = vec4(0.0, 0.0, 0.0, 1.0); // <-- Removed the "gl_"
     return;
   }
 
