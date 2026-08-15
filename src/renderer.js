@@ -408,7 +408,7 @@ function createWebGPURenderer(canvas, opts) {
       state.atlasTex = device.createTexture({
         size: [atlasCanvas.canvas.width, atlasCanvas.canvas.height, 1],
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       })
       state.samplerAtlas = device.createSampler({ minFilter: 'linear', magFilter: 'linear' })
       state.queue.copyExternalImageToTexture({ source: atlasCanvas.canvas }, { texture: state.atlasTex }, [atlasCanvas.canvas.width, atlasCanvas.canvas.height])
@@ -416,20 +416,20 @@ function createWebGPURenderer(canvas, opts) {
       state.wordTex = device.createTexture({
         size: [1024, 256, 1],
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       })
       state.wordDepartTex = device.createTexture({
         size: [1024, 256, 1],
         format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       })
       state.overlayTex = device.createTexture({
-        size: [1, 1, 1],
+        size: [state.cols, state.rows, 1],
         format: 'rgba8unorm',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       })
       state.fluidTex = device.createTexture({
-        size: [1, 1, 1],
+        size: [state.cols, state.rows, 1],
         format: 'rgba32float',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       })
@@ -449,8 +449,8 @@ function createWebGPURenderer(canvas, opts) {
           { binding: 0, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
           { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '2d' } },
           { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-          { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '2d' } },
-          { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+          { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float', viewDimension: '2d' } },
+          { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'non-filtering' } },
           { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '2d' } },
           { binding: 6, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
           { binding: 7, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '2d' } },
@@ -487,7 +487,7 @@ function createWebGPURenderer(canvas, opts) {
 
       applyStaticUniforms()
       if (state.pendingFluid) {
-        state.queue.writeTexture({ texture: state.fluidTex }, { bytesPerRow: state.cols * 4 * 4 }, { width: state.cols, height: state.rows }, state.pendingFluid)
+        state.queue.writeTexture({ texture: state.fluidTex }, state.pendingFluid, { bytesPerRow: state.cols * 4 * 4 }, { width: state.cols, height: state.rows })
         state.pendingFluid = null
       }
       if (state.pendingWord) {
@@ -499,7 +499,7 @@ function createWebGPURenderer(canvas, opts) {
         state.pendingWordDepart = null
       }
       if (state.pendingOverlay) {
-        state.queue.writeTexture({ texture: state.overlayTex }, { bytesPerRow: state.cols * 4 }, { width: state.cols, height: state.rows }, state.pendingOverlay)
+        state.queue.writeTexture({ texture: state.overlayTex }, state.pendingOverlay, { bytesPerRow: state.cols * 4 }, { width: state.cols, height: state.rows })
         state.pendingOverlay = null
       }
     })().catch((error) => {
@@ -514,9 +514,9 @@ function createWebGPURenderer(canvas, opts) {
     if (!state.device || !state.fluidTex) return
     state.queue.writeTexture(
       { texture: state.fluidTex },
+      pixels,
       { bytesPerRow: cols * 4 * 4 },
       { width: cols, height: rows },
-      pixels,
     )
   }
 
@@ -524,9 +524,9 @@ function createWebGPURenderer(canvas, opts) {
     if (!state.device || !state.overlayTex) return
     state.queue.writeTexture(
       { texture: state.overlayTex },
+      pixels,
       { bytesPerRow: cols * 4 },
       { width: cols, height: rows },
-      pixels,
     )
   }
 
@@ -595,6 +595,14 @@ function createWebGPURenderer(canvas, opts) {
         format: 'rgba32float',
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       })
+      if (state.overlayTex) {
+        state.overlayTex.destroy()
+      }
+      state.overlayTex = state.device.createTexture({
+        size: [cols, rows, 1],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      })
       if (state.bindGroup) {
         state.bindGroup = state.device.createBindGroup({
           layout: state.bindGroupLayout,
@@ -613,14 +621,6 @@ function createWebGPURenderer(canvas, opts) {
           ],
         })
       }
-      if (state.overlayTex) {
-        state.overlayTex.destroy()
-      }
-      state.overlayTex = state.device.createTexture({
-        size: [cols, rows, 1],
-        format: 'rgba8unorm',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
-      })
     }
 
     return { cols, rows }
