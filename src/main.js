@@ -10,10 +10,12 @@ const commitLine = __COMMIT_BRANCH__ && __COMMIT_BRANCH__ !== 'main'
   ? `COMMIT ${__COMMIT_BRANCH__.toUpperCase()} ${__COMMIT_HASH__.toUpperCase()}`
   : `COMMIT ${__COMMIT_HASH__.toUpperCase()}`
 
-const BUILD_DETAIL_LINES = [
-  commitLine,
-  `BUILT ${__BUILD_TIME__.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
-]
+function getBuildDetailLines(engine) {
+  return [
+    `${commitLine} ENGINE ${engine.toUpperCase()}`,
+    `BUILT ${__BUILD_TIME__.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
+  ]
+}
 
 
 function showBootError(message) {
@@ -63,7 +65,8 @@ async function boot() {
     ...config,
     staticUniforms,
   })
-  const overlay = createCharOverlay(BUILD_DETAIL_LINES, chars)
+  let activeEngine = renderer.engine
+  const overlay = createCharOverlay(getBuildDetailLines(activeEngine), chars)
   const wordCycler = createWordCycler()
   function showBuildDetails() {
     overlay.show()
@@ -123,6 +126,10 @@ async function boot() {
     if (wordState.changed) {
       renderer.uploadWordTexture(wordState.canvas)
       renderer.uploadDepartWordTexture(wordState.departCanvas)
+    }
+    if (renderer.engine !== activeEngine) {
+      activeEngine = renderer.engine
+      overlay.setLines(getBuildDetailLines(activeEngine))
     }
     const overlayState = overlay.update()
     renderer.uploadOverlay(overlayState.pixels, overlayState.cols, overlayState.rows)

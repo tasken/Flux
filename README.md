@@ -1,8 +1,8 @@
 # Flux — the Vortex of Forgotten Letters
 
-Interactive, generative text-mode art rendered with WebGL as a live character grid in the browser.
+Interactive, generative text-mode art rendered with WebGPU as a live character grid in the browser, with a WebGL fallback for compatibility.
 
-A hybrid CPU+GPU renderer combines a Navier-Stokes fluid simulation with a procedural shader field. The CPU solver feeds density and velocity into a fragment shader that warps coordinates, picks characters from a font atlas, and applies OKLch perceptual color. Pointer input injects forces into the fluid and adds instant visual glow. Lyric lines emerge as giant background letters — a split-flap cycling animation renders text onto a small bitmap that the shader scales to fill the entire screen, driving character density so words form from the grid itself.
+A hybrid CPU+GPU renderer combines a Navier-Stokes fluid simulation with a procedural shader field. The CPU solver feeds density and velocity into the renderer, which uploads textures and renders the scene in a fullscreen pass. The shader warps coordinates, picks characters from a font atlas, and applies OKLch perceptual color. Pointer input injects forces into the fluid and adds instant visual glow. Lyric lines emerge as giant background letters — a split-flap cycling animation renders text onto a small bitmap that the shader scales to fill the entire screen, driving character density so words form from the grid itself.
 
 ## Features
 
@@ -19,7 +19,7 @@ A hybrid CPU+GPU renderer combines a Navier-Stokes fluid simulation with a proce
 ## Tech Stack
 
 - JavaScript (ES modules)
-- WebGL
+- WebGPU with WebGL fallback
 - Vite (dev server + build)
 - Google Fonts (IBM Plex Mono)
 
@@ -50,7 +50,7 @@ webArt/
 ├── index.html
 ├── src/
 │   ├── main.js             # entry: boot, pointer, animation loop
-│   ├── renderer.js         # WebGL program, font atlas, fluid/word textures
+│   ├── renderer.js         # WebGPU renderer with WebGL fallback, font atlas, fluid/word textures
 │   ├── sketch.js           # GLSL shaders, visual config, OKLch color
 │   ├── settings.js         # all tunable constants in one place
 │   ├── simulation.js       # CPU fluid sim wrapper with RGBA packing
@@ -90,7 +90,7 @@ Roughly ordered by impact vs effort.
 - **Multi-touch interaction** — track multiple simultaneous touch points for tablet/phone engagement
 - **Ambient density injection** — sparse random density each frame to prevent the canvas from going dark
 - **Screenshot / GIF export** — capture frames via `toBlob` or record a short sequence
-- **GPU-only simulation** — move the solver to WebGL 2 transform feedback or WebGPU compute shaders
+- **GPU-only simulation** — move the solver to WebGPU compute shaders or more advanced GPU-side fluid passes
 
 ## Available Scripts
 

@@ -95,10 +95,15 @@ export function createCharOverlay(lines, atlasChars) {
     rebuildTarget()
   }
 
+  function setLines(nextLines) {
+    lines = nextLines
+    rebuildTarget()
+  }
+
   function update() {
     if (frameCount++ % OVERLAY_FRAME_SKIP === 0) step()
     return { pixels, cols, rows }
   }
 
-  return { resize, show, hide, update }
+  return { resize, show, hide, setLines, update }
 }
