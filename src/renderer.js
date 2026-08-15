@@ -256,7 +256,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   let wordAspect = uniforms.data4.y;
   let densityCharCount = uniforms.data4.z;
 
-  let fc = vec2f(pos.x, resolution.y - pos.y);
+  let fc = pos.xy;
   let cell = floor(fc / cellSize);
   if (cell.x >= gridSize.x || cell.y >= gridSize.y) {
     return vec4f(0.0, 0.0, 0.0, 1.0);
