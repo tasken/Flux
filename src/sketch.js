@@ -1,7 +1,7 @@
 // ┌─────────────────────────────────────────────────────────────────────────────┐
 // │  sketch.js — the creative part.                                            │
 // │  Edit the fragment shader below to change the visual.                      │
-// │  Vite HMR will reload the browser on save.                                 │
+// │  Reload the browser after saving to see visual changes.                    │
 // └─────────────────────────────────────────────────────────────────────────────┘
 
 import {
@@ -40,6 +40,7 @@ uniform vec2      u_gridSize;   // columns, rows
 uniform vec2      u_cellSize;   // cell size in device pixels
 uniform sampler2D u_atlas;       // font texture atlas
 uniform float     u_charCount;   // number of characters in atlas (total)
+uniform vec2      u_atlasInset;  // transparent gutter inside each atlas cell
 uniform vec2      u_pointer;     // normalized pointer position, top-left origin
 uniform vec2      u_pointerDelta;
 uniform float     u_pointerActive;
@@ -215,7 +216,8 @@ void main() {
 
   // Local UV within this cell → sample the font atlas
   vec2 localUV = fract(fc / u_cellSize);
-  vec2 atlasUV = vec2((charIdx + localUV.x) / u_charCount, localUV.y);
+  vec2 atlasLocalUV = mix(u_atlasInset, 1.0 - u_atlasInset, localUV);
+  vec2 atlasUV = vec2((charIdx + atlasLocalUV.x) / u_charCount, atlasLocalUV.y);
   float alpha  = texture(u_atlas, atlasUV).a;
 
   // ── Color: OKLch driven by fluid velocity + density ──

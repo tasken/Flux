@@ -10,6 +10,7 @@ const UNIFORM_NAMES = [
   'u_cellSize',
   'u_atlas',
   'u_charCount',
+  'u_atlasInset',
   'u_pointer',
   'u_pointerDelta',
   'u_pointerActive',
@@ -75,48 +76,23 @@ function getUniforms(gl, program, names) {
 // The alpha channel carries the antialiased glyph shape.
 
 function createAtlas(gl, chars, fontSize, fontFamily, cellWidthUnits = 1, cellHeightUnits = 1) {
-  const tmp = document.createElement('canvas')
-  const tctx = tmp.getContext('2d')
-  if (!tctx) throw new Error('2D canvas context not available for font atlas')
-  tctx.font = `${fontSize}px ${fontFamily}`
-
-  let charWidth = 0
-  for (const ch of chars) {
-    if (ch === ' ') continue
-    charWidth = Math.max(charWidth, Math.ceil(tctx.measureText(ch).width))
-  }
-  if (charWidth === 0) charWidth = Math.ceil(tctx.measureText('M').width)
-
-  // Use real font metrics for accurate cell height (with fallback)
-  const mRef    = tctx.measureText('Mg|')
-  const ascent  = Math.ceil(mRef.fontBoundingBoxAscent  ?? fontSize * 0.85)
-  const safeCellWidthUnits = Math.max(1, cellWidthUnits)
-  const safeCellHeightUnits = Math.max(1, cellHeightUnits)
-  const charHeight = Math.max(1, Math.ceil(charWidth * safeCellHeightUnits / safeCellWidthUnits))
-
-  const atlas = document.createElement('canvas')
-  atlas.width  = charWidth * chars.length
-  atlas.height = charHeight
-  const ctx = atlas.getContext('2d')
-  if (!ctx) throw new Error('2D canvas context not available for atlas rendering')
-
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.textBaseline = 'alphabetic'
-  ctx.textAlign    = 'center'
-  ctx.fillStyle = '#fff'
-  for (let i = 0; i < chars.length; i++) {
-    ctx.fillText(chars[i], i * charWidth + charWidth * 0.5, ascent)
-  }
+  const atlas = createAtlasCanvas(
+    chars,
+    fontSize,
+    fontFamily,
+    cellWidthUnits,
+    cellHeightUnits,
+  )
 
   const tex = gl.createTexture()
   gl.bindTexture(gl.TEXTURE_2D, tex)
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas)
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas.canvas)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
-  return { tex, charWidth, charHeight }
+  return { tex, ...atlas }
 }
 
 // ── public API ────────────────────────────────────────────────────────────────
@@ -126,19 +102,34 @@ function createAtlasCanvas(chars, fontSize, fontFamily, cellWidthUnits = 1, cell
   const tctx = tmp.getContext('2d')
   if (!tctx) throw new Error('2D canvas context not available for font atlas')
   tctx.font = `${fontSize}px ${fontFamily}`
+  tctx.textAlign = 'center'
 
-  let charWidth = 0
+  let maxAdvance = 0
+  let maxAscent = 0
+  let maxDescent = 0
+  const glyphMetrics = []
   for (const ch of chars) {
+    const metrics = tctx.measureText(ch)
+    const left = metrics.actualBoundingBoxLeft ?? metrics.width * 0.5
+    const right = metrics.actualBoundingBoxRight ?? metrics.width * 0.5
+    glyphMetrics.push({ left, right })
     if (ch === ' ') continue
-    charWidth = Math.max(charWidth, Math.ceil(tctx.measureText(ch).width))
+    maxAdvance = Math.max(maxAdvance, metrics.width)
+    maxAscent = Math.max(maxAscent, metrics.actualBoundingBoxAscent ?? fontSize * 0.85)
+    maxDescent = Math.max(maxDescent, metrics.actualBoundingBoxDescent ?? fontSize * 0.15)
   }
-  if (charWidth === 0) charWidth = Math.ceil(tctx.measureText('M').width)
+  if (maxAdvance === 0) maxAdvance = tctx.measureText('M').width
 
-  const mRef = tctx.measureText('Mg|')
-  const ascent = Math.ceil(mRef.fontBoundingBoxAscent ?? fontSize * 0.85)
+  const padding = 1
+  const gridCellWidth = Math.max(1, Math.ceil(maxAdvance))
   const safeCellWidthUnits = Math.max(1, cellWidthUnits)
   const safeCellHeightUnits = Math.max(1, cellHeightUnits)
-  const charHeight = Math.max(1, Math.ceil(charWidth * safeCellHeightUnits / safeCellWidthUnits))
+  const ratioHeight = Math.ceil(gridCellWidth * safeCellHeightUnits / safeCellWidthUnits)
+  const inkHeight = maxAscent + maxDescent
+  const gridCellHeight = Math.max(1, ratioHeight, Math.ceil(inkHeight))
+  const charWidth = gridCellWidth + padding * 2
+  const charHeight = gridCellHeight + padding * 2
+  const baseline = padding + maxAscent + (gridCellHeight - inkHeight) * 0.5
 
   const atlas = document.createElement('canvas')
   atlas.width = charWidth * chars.length
@@ -151,10 +142,24 @@ function createAtlasCanvas(chars, fontSize, fontFamily, cellWidthUnits = 1, cell
   ctx.textAlign = 'center'
   ctx.fillStyle = '#fff'
   for (let i = 0; i < chars.length; i++) {
-    ctx.fillText(chars[i], i * charWidth + charWidth * 0.5, ascent)
+    const inkWidth = glyphMetrics[i].left + glyphMetrics[i].right
+    const scaleX = inkWidth > gridCellWidth ? gridCellWidth / inkWidth : 1
+    ctx.save()
+    ctx.translate(i * charWidth + charWidth * 0.5, 0)
+    ctx.scale(scaleX, 1)
+    ctx.fillText(chars[i], 0, baseline)
+    ctx.restore()
   }
 
-  return { canvas: atlas, charWidth, charHeight }
+  return {
+    canvas: atlas,
+    charWidth,
+    charHeight,
+    gridCellWidth,
+    gridCellHeight,
+    atlasInsetX: padding / charWidth,
+    atlasInsetY: padding / charHeight,
+  }
 }
 
 const WGSL_SHADER = /* wgsl */ `
@@ -164,6 +169,7 @@ struct Uniforms {
   data2: vec4f,
   data3: vec4f,
   data4: vec4f,
+  data5: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -310,7 +316,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
   }
 
   let localUV = fract(fc / cellSize);
-  let atlasUV = vec2f((charIdx + localUV.x) / uniforms.data4.w, localUV.y);
+  let atlasLocalUV = mix(uniforms.data5.xy, vec2f(1.0) - uniforms.data5.xy, localUV);
+  let atlasUV = vec2f((charIdx + atlasLocalUV.x) / uniforms.data4.w, atlasLocalUV.y);
   let glyph = textureSampleLevel(atlasTex, atlasSampler, atlasUV, 0.0);
   let alpha = glyph.a;
 
@@ -360,8 +367,10 @@ function createWebGPURenderer(canvas, opts) {
     samplerOverlay: null,
     cols: 1,
     rows: 1,
-    charWidth: atlasCanvas.charWidth,
-    charHeight: atlasCanvas.charHeight,
+    charWidth: atlasCanvas.gridCellWidth,
+    charHeight: atlasCanvas.gridCellHeight,
+    atlasInsetX: atlasCanvas.atlasInsetX,
+    atlasInsetY: atlasCanvas.atlasInsetY,
     seed: Math.random() * 1e5,
     pendingFluid: null,
     pendingWord: null,
@@ -372,7 +381,7 @@ function createWebGPURenderer(canvas, opts) {
     fallbackRenderer: null,
   }
 
-  const uniformData = new Float32Array(20)
+  const uniformData = new Float32Array(24)
 
   function applyStaticUniforms() {
     if (!state.device || !state.uniformBuffer) return
@@ -382,6 +391,8 @@ function createWebGPURenderer(canvas, opts) {
     uniformData[17] = Number(u.u_wordAspect ?? 1)
     uniformData[18] = Number(u.u_densityCharCount ?? chars.length)
     uniformData[19] = Number(chars.length)
+    uniformData[20] = state.atlasInsetX
+    uniformData[21] = state.atlasInsetY
     state.queue.writeBuffer(state.uniformBuffer, 0, uniformData.buffer, 0, uniformData.byteLength)
   }
 
@@ -548,8 +559,8 @@ function createWebGPURenderer(canvas, opts) {
 
     uniformData[4] = cols
     uniformData[5] = rows
-    uniformData[6] = state.charWidth
-    uniformData[7] = state.charHeight
+    uniformData[6] = width / cols
+    uniformData[7] = height / rows
 
     uniformData[8] = x
     uniformData[9] = y
@@ -564,6 +575,8 @@ function createWebGPURenderer(canvas, opts) {
     uniformData[17] = Number(staticUniforms.u_wordAspect ?? 1)
     uniformData[18] = Number(staticUniforms.u_densityCharCount ?? chars.length)
     uniformData[19] = Number(chars.length)
+    uniformData[20] = state.atlasInsetX
+    uniformData[21] = state.atlasInsetY
 
     state.queue.writeBuffer(state.uniformBuffer, 0, uniformData.buffer, 0, uniformData.byteLength)
   }
@@ -771,6 +784,7 @@ function createGLRenderer(canvas, opts) {
     gl.bindTexture(gl.TEXTURE_2D, atlas.tex)
     gl.uniform1i(u.u_atlas, 0)
     gl.uniform1f(u.u_charCount, chars.length)
+    gl.uniform2f(u.u_atlasInset, atlas.atlasInsetX, atlas.atlasInsetY)
   }
 
   let fluidTex = gl.createTexture()
@@ -861,8 +875,8 @@ function createGLRenderer(canvas, opts) {
       canvas.height = canvas.clientHeight * dpr
       gl.viewport(0, 0, canvas.width, canvas.height)
 
-      const cols = Math.max(1, Math.floor(canvas.width / atlas.charWidth))
-      const rows = Math.max(1, Math.floor(canvas.height / atlas.charHeight))
+      const cols = Math.max(1, Math.floor(canvas.width / atlas.gridCellWidth))
+      const rows = Math.max(1, Math.floor(canvas.height / atlas.gridCellHeight))
 
       if (cols !== fluidCols || rows !== fluidRows) {
         fluidCols = cols
@@ -874,7 +888,7 @@ function createGLRenderer(canvas, opts) {
       gl.useProgram(program)
       gl.uniform2f(u.u_resolution, canvas.width, canvas.height)
       gl.uniform2f(u.u_gridSize, cols, rows)
-      gl.uniform2f(u.u_cellSize, atlas.charWidth, atlas.charHeight)
+      gl.uniform2f(u.u_cellSize, canvas.width / cols, canvas.height / rows)
 
       return { cols, rows }
     },
