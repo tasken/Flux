@@ -4,16 +4,17 @@ import { createSimulation } from './simulation.js'
 import { createCharOverlay } from './overlay.js'
 import { createWordCycler } from './words.js'
 import { chars } from './charset.js'
+import { buildInfo } from './build-info.js'
 import { gridCellWidthUnits, gridCellHeightUnits, pointerMoveForce, pointerDownForce, pointerMoveDensity, pointerDownDensity, pointerRadius, pointerIdleMs, pointerDeltaDecay } from './settings.js'
 
-const commitLine = __COMMIT_BRANCH__ && __COMMIT_BRANCH__ !== 'main'
-  ? `COMMIT ${__COMMIT_BRANCH__.toUpperCase()} ${__COMMIT_HASH__.toUpperCase()}`
-  : `COMMIT ${__COMMIT_HASH__.toUpperCase()}`
+const commitLine = buildInfo.commitBranch && buildInfo.commitBranch !== 'main'
+  ? `COMMIT ${buildInfo.commitBranch.toUpperCase()} ${buildInfo.commitHash.toUpperCase()}`
+  : `COMMIT ${buildInfo.commitHash.toUpperCase()}`
 
 function getBuildDetailLines(engine) {
   return [
     `${commitLine} ENGINE ${engine.toUpperCase()}`,
-    `BUILT ${__BUILD_TIME__.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
+    `BUILT ${buildInfo.buildTime.replace('T', ' ').replace(/:/g, '.').toUpperCase()}`,
   ]
 }
 
@@ -185,30 +186,6 @@ async function boot() {
 
   handleResize()
   rafId = requestAnimationFrame(frame)
-
-  if (import.meta.hot) {
-    import.meta.hot.accept('./sketch.js', (newSketch) => {
-      if (!newSketch) return
-      try {
-        renderer.recompile(newSketch.vertexSource, newSketch.fragmentSource, newSketch.staticUniforms)
-      } catch (e) {
-        console.error('Shader recompile failed:', e.message)
-        showBootError(`Shader error — fix and save again.\n\n${e.message}`)
-      }
-    })
-
-    import.meta.hot.dispose(() => {
-      cancelAnimationFrame(rafId)
-      window.removeEventListener('resize', handleResize)
-
-      canvas.removeEventListener('pointermove', handlePointerMove)
-      canvas.removeEventListener('pointerenter', handlePointerEnter)
-      canvas.removeEventListener('pointerleave', handlePointerLeave)
-      canvas.removeEventListener('pointerdown', handlePointerDown)
-      window.removeEventListener('pointerup', handlePointerUp)
-      renderer.dispose()
-    })
-  }
 }
 
 boot().catch((error) => {

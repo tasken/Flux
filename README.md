@@ -13,35 +13,39 @@ A hybrid CPU+GPU renderer combines a Navier-Stokes fluid simulation with a proce
 - Giant background letters — lyrics emerge as massive density patterns via split-flap animation
 - Real font metrics in the glyph atlas (fontBoundingBoxAscent/Descent)
 - Random seed per session — each page load looks different
-- Shader-only HMR — edit `src/sketch.js` and see changes without page reload
+- Browser-native ES modules with no JavaScript package install
 - Automated GitHub Pages deployment
 
 ## Tech Stack
 
 - JavaScript (ES modules)
 - WebGPU with WebGL fallback
-- Vite (dev server + build)
+- Python 3 standard library (local server + static build)
 - Google Fonts (IBM Plex Mono)
 
 ## Getting Started
 
-### Install dependencies
-
-```bash
-npm install
-```
-
 ### Start development server
 
 ```bash
-npm run dev
+python3 -m http.server 8000
 ```
+
+Open `http://localhost:8000`. Reload the browser after editing a module.
 
 ### Create a production build
 
 ```bash
-npm run build
+python3 scripts/build_site.py
 ```
+
+The static artifact is written to `dist/`. Preview it with:
+
+```bash
+python3 -m http.server 8000 --directory dist
+```
+
+The web app has no install step. The optional density-ramp utility requires Pillow (`python3 -m pip install pillow`).
 
 ## Project Structure
 
@@ -50,15 +54,18 @@ webArt/
 ├── index.html
 ├── src/
 │   ├── main.js             # entry: boot, pointer, animation loop
+│   ├── build-info.js       # local metadata defaults; generated in production builds
 │   ├── renderer.js         # WebGPU renderer with WebGL fallback, font atlas, fluid/word textures
 │   ├── sketch.js           # GLSL shaders, visual config, OKLch color
 │   ├── settings.js         # all tunable constants in one place
 │   ├── simulation.js       # CPU fluid sim wrapper with RGBA packing
 │   ├── fluid.js            # Navier-Stokes solver (used by simulation.js)
 │   └── words.js            # split-flap lyric cycler with bitmap output
+├── scripts/
+│   ├── build_site.py       # package native modules and generate build metadata
+│   └── derive_density_ramp.py
 ├── .github/workflows/      # GitHub Pages deploy
-├── vite.config.js
-└── package.json
+└── index.html
 ```
 
 ## Interaction
@@ -92,11 +99,10 @@ Roughly ordered by impact vs effort.
 - **Screenshot / GIF export** — capture frames via `toBlob` or record a short sequence
 - **GPU-only simulation** — move the solver to WebGPU compute shaders or more advanced GPU-side fluid passes
 
-## Available Scripts
+## Available Commands
 
-| Script | Description |
+| Command | Description |
 |---|---|
-| `npm run dev` | Start Vite dev server with HMR |
-| `npm run build` | Create a production bundle |
-| `npm run preview` | Preview the production build |
-| `npm run check` | Run build |
+| `python3 -m http.server 8000` | Serve source modules for local development |
+| `python3 scripts/build_site.py` | Create the static production artifact |
+| `python3 -m http.server 8000 --directory dist` | Preview the production artifact |
